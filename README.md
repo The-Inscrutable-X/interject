@@ -79,8 +79,10 @@ each side answer there are also:
 - **dismiss**: removes the box (and boxes inside it), and stops a side chat
   that is still working.
 
-From the keyboard: `/interject followup` and `/interject keep` act on the
-latest side answer, and `/interject clear` removes every box.
+From the keyboard: `/interject ask <question>` asks on the side at the last
+line of the latest reply; `/interject followup`, `/interject keep` and
+`/interject fork` act on the latest side answer; `/interject clear` removes
+every box.
 
 Boxes are saved per session: resuming a session (`claude --resume`) brings
 them back.

@@ -1072,7 +1072,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'interject',
       description: 'Interject at a line of the reply: select it first, or pick it from a list',
-      argumentHint: '[keep | followup | clear]',
+      argumentHint: '[ask <question> | followup | keep | fork | clear]',
       immediate: true,
     })
 
@@ -1154,6 +1154,31 @@ export const register: Register = on => {
   // /interject: start an interjection at the selected line, or offer a list.
   on('command.run', { command: 'interject' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
+    if (arg === 'ask' || arg.startsWith('ask ')) {
+      // A side question at the last line of the latest reply, from the keyboard.
+      const question = e.args.trim().slice(3).trim()
+      if (question === '') return { text: 'Usage: /interject ask <your question>' }
+      const latest = await replyAt($, 0)
+      const last = splitUnits(latest).at(-1)
+      if (last === undefined) return { text: 'Nothing to interject on yet: Claude has not replied in this conversation.' }
+      await update($, draft, (): InterjectDraft => ({
+        stage: 'type',
+        requestId: lastRowOf(latest),
+        reply: latest,
+        main: latest,
+        back: 0,
+        lines: [],
+        quote: last,
+      }))
+      await askAside($, question)
+      return { text: 'Asked on the side, at the last line of the reply.' }
+    }
+    if (arg === 'fork') {
+      const last = await latestAnswered($)
+      if (last === undefined) return { text: 'No answered side question yet.' }
+      await forkOut($, last)
+      return { text: 'Forking the last side chat: its box says how it goes.' }
+    }
     if (arg === 'clear') {
       await setNotes($, () => [])
       return { text: 'Removed every interjection box.' }
