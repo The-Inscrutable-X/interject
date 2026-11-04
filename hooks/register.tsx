@@ -167,6 +167,58 @@ function withForm(anchors: Anchor[], end: number | undefined): Anchor[] {
   return [...anchors, { end, notes: [], form: true as const }].sort((a, b) => a.end - b.end)
 }
 
+// A box drawn at a row of a markdown table splits the table: the rows after it
+// would have no header and be drawn as plain text. They get the header again.
+
+type Table = { start: number; headEnd: number; end: number; head: string }
+
+const isTableRule = (line: string) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(line) && line.includes('-')
+
+/** The tables of `text` outside code fences, as offsets: the header row and rule line, then the rows. */
+function tablesIn(text: string): Table[] {
+  const lines = text.split('\n')
+  const starts: number[] = []
+  let at = 0
+  for (const line of lines) {
+    starts.push(at)
+    at += line.length + 1
+  }
+  const endOf = (i: number) => (starts[i] ?? 0) + (lines[i] ?? '').length
+  const tables: Table[] = []
+  let inFence = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? ''
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence
+    if (inFence || !line.includes('|') || !isTableRule(lines[i + 1] ?? '')) continue
+    let last = i + 1
+    while ((lines[last + 1] ?? '').includes('|') && (lines[last + 1] ?? '').trim() !== '') last++
+    tables.push({ start: starts[i] ?? 0, headEnd: endOf(i + 1), end: endOf(last), head: line + '\n' + (lines[i + 1] ?? '') })
+    i = last
+  }
+  return tables
+}
+
+/** The anchors with none inside a table's header: a box there goes under the rule line. */
+function fitTables(text: string, anchors: Anchor[]): Anchor[] {
+  const tables = tablesIn(text)
+  if (tables.length === 0) return anchors
+  const merged = new Map<number, Anchor>()
+  for (const a of anchors) {
+    const t = tables.find(t => a.end > t.start && a.end < t.headEnd)
+    const end = t === undefined ? a.end : t.headEnd
+    const there = merged.get(end)
+    merged.set(end, there === undefined ? { ...a, end } : { end, notes: [...there.notes, ...a.notes], form: there.form ?? a.form })
+  }
+  return [...merged.values()].sort((a, b) => a.end - b.end)
+}
+
+/** `text` from `from` to `end`, with the header again when it starts inside a table. */
+function pieceOf(text: string, from: number, end?: number): string {
+  const piece = text.slice(from, end).replace(/^\n+/, '')
+  const t = tablesIn(text).find(t => from >= t.headEnd && from < t.end)
+  return t === undefined ? piece : t.head + '\n' + piece
+}
+
 /** One line, cut to `n` characters. */
 function clip(s: string, n: number): string {
   const one = s.replace(/\s+/g, ' ').trim()
@@ -1233,8 +1285,8 @@ export const register: Register = on => {
       if (n.status === 'answered' && n.answer !== undefined) {
         const inside = depth < MAX_DEPTH ? all.filter(m => m.on === n.id) : []
         let from = 0
-        for (const { end, notes: here, form: hasForm } of withForm(anchorsIn(n.answer, inside), formEnd(n.answer, n.id))) {
-          const segment = n.answer.slice(from, end).replace(/^\n+/, '')
+        for (const { end, notes: here, form: hasForm } of fitTables(n.answer, withForm(anchorsIn(n.answer, inside), formEnd(n.answer, n.id)))) {
+          const segment = pieceOf(n.answer, from, end)
           if (segment.trim() !== '') body.push(<Markdown text={segment} />)
           for (const m of here) {
             const drawn = drawNote(m, depth + 1)
@@ -1246,7 +1298,7 @@ export const register: Register = on => {
           if (isCut) break
         }
         const rest = n.answer.slice(from).replace(/^\n+/, '')
-        if (rest.trim() !== '') body.push(isCut ? cutLine(rest, 'answer') : <Markdown text={rest} />)
+        if (rest.trim() !== '') body.push(isCut ? cutLine(rest, 'answer') : <Markdown text={pieceOf(n.answer, from)} />)
       }
 
       const icon = n.mode === 'side' ? '? ' : n.mode === 'queue' ? '+ ' : '✂ '
@@ -1295,8 +1347,8 @@ export const register: Register = on => {
     const parts: RenderElement[] = []
     let from = 0
     let isCut = false
-    for (const [i, { end, notes: here, form: hasForm }] of withForm(anchorsIn(text, top), formEnd(text, undefined)).entries()) {
-      const segment = text.slice(from, end).replace(/^\n+/, '')
+    for (const [i, { end, notes: here, form: hasForm }] of fitTables(text, withForm(anchorsIn(text, top), formEnd(text, undefined))).entries()) {
+      const segment = pieceOf(text, from, end)
       if (i === 0) {
         // The engine draws the first part, so the reply keeps its own look.
         parts.push(await next({ ...e, props: { ...e.props, text: segment } }))
@@ -1325,7 +1377,7 @@ export const register: Register = on => {
 
     const rest = text.slice(from).replace(/^\n+/, '')
     if (rest.trim() !== '') {
-      parts.push(<Box paddingLeft={indent}>{isCut ? cutLine(rest, 'reply') : <Markdown text={rest} />}</Box>)
+      parts.push(<Box paddingLeft={indent}>{isCut ? cutLine(rest, 'reply') : <Markdown text={pieceOf(text, from)} />}</Box>)
     }
     return <Box flexDirection="column">{parts}</Box>
   })

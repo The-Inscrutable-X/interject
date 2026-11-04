@@ -351,6 +351,45 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
   })
 }
 
+test('a box at a table row splits the table into two tables, the header drawn again', async ($, on) => {
+  const { world } = engine(on, 'terminal')
+  const TABLE = [
+    'The parts:',
+    '',
+    '| Part | Job |',
+    '| --- | --- |',
+    '| Rig | records video |',
+    '| Feeder | turns the plate |',
+    '| Server | saves the run |',
+    '',
+    'That is all.',
+  ].join('\n')
+  const ROW = { plugin: 'interject', surface: 'terminal', component: 'AssistantMessage', requestId: 't1', props: { text: TABLE, isFirstOfReply: true } } as const
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'terminal')
+  const seen = await $.ui.mount(ROW)
+  await seen.unmount()
+
+  // At a row in the middle: the rows after the box are a table of their own.
+  world.selection = { text: 'Feeder turns the plate', requestId: 't1' }
+  await interject($, 'terminal', 'Which plate?', 'enter')
+  let row = await $.ui.mount(ROW)
+  expect((await row.find({ type: 'Text', text: /engine:/ }))?.text).toContain('| Feeder | turns the plate |')
+  expect((await row.find({ type: 'Text', text: /engine:/ }))?.text).not.toContain('Server')
+  const after = (await row.findAll({ type: 'Markdown' })).map(m => String(m.props?.text ?? '')).find(t => t.includes('Server'))
+  expect(after).toBe('| Part | Job |\n| --- | --- |\n| Server | saves the run |\n\nThat is all.')
+  await row.unmount()
+
+  // At the header: the box goes under the rule line, the rows below it.
+  world.selection = { text: 'Part Job', requestId: 't1' }
+  await interject($, 'terminal', 'Why these?', 'enter')
+  row = await $.ui.mount(ROW)
+  expect((await row.find({ type: 'Text', text: /engine:/ }))?.text).toContain('| Part | Job |\n| --- | --- |')
+  const rows = (await row.findAll({ type: 'Markdown' })).map(m => String(m.props?.text ?? '')).find(t => t.includes('Rig'))
+  expect(rows).toBe('| Part | Job |\n| --- | --- |\n| Rig | records video |\n| Feeder | turns the plate |')
+  await row.unmount()
+})
+
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`cut and continue while Claude writes: stops the turn, sends the interjection, hides the rest (${surface})`, async ($, on) => {
     const { world } = engine(on, surface)
