@@ -732,19 +732,41 @@ function describeCall(e: { tool: string }): string {
   return arg === undefined ? name : name + ' ' + clip(arg, 60)
 }
 
-/** Takes a box away; a side chat still working is stopped. */
-async function dismiss($: EngineInterface, n: InterjectNote): Promise<void> {
-  const run = outside.get(n.id)
-  if (run !== undefined) run.stop = true
-  const turnId = n.agentId === undefined ? undefined : agentTurns.get(n.agentId)
-  if (n.status === 'thinking' && turnId !== undefined) {
-    try {
-      await $.turn.abort({ turnId })
-    } catch {
-      // It ended on its own meanwhile.
+/** A box and every box drawn inside it, however deep. */
+function boxesUnder(list: InterjectNote[], id: string): Set<string> {
+  const ids = new Set([id])
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const m of list) {
+      if (m.on !== undefined && ids.has(m.on) && !ids.has(m.id)) {
+        ids.add(m.id)
+        grew = true
+      }
     }
   }
-  await setNotes($, list => list.filter(m => m.id !== n.id && m.on !== n.id))
+  return ids
+}
+
+/** Takes a box away, with the boxes inside it; a side chat still working is stopped. */
+async function dismiss($: EngineInterface, n: InterjectNote): Promise<void> {
+  const list = await read($, notes)
+  const gone = boxesUnder(list, n.id)
+  for (const m of [n, ...list.filter(m => m.id !== n.id && gone.has(m.id))]) {
+    const run = outside.get(m.id)
+    if (run !== undefined) run.stop = true
+    const turnId = m.agentId === undefined ? undefined : agentTurns.get(m.agentId)
+    if (m.status === 'thinking' && turnId !== undefined) {
+      try {
+        await $.turn.abort({ turnId })
+      } catch {
+        // It ended on its own meanwhile.
+      }
+    }
+  }
+  await setNotes($, all => {
+    const under = boxesUnder(all, n.id)
+    return all.filter(m => !under.has(m.id))
+  })
 }
 
 /** The fork's title: what the sidebar shows. */

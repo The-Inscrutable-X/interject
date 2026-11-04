@@ -313,6 +313,42 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     expect(await message.find({ type: 'Text', text: /Kept: attached/ })).toBeDefined()
     await message.unmount()
   })
+
+  test(`dismiss: a box kept deep inside a dismissed box is not sent (${surface})`, async ($, on) => {
+    const { world } = engine(on, surface)
+    world.selection = { text: LINE, requestId: 'm1' }
+    world.answers.push('Use the round plate.\n\nIt sits under the tank.', 'The tank.\n\nIt holds 40 litres.', 'Water.')
+    let sentContext: readonly string[] = []
+    on('prompt.submit', (_, e) => {
+      sentContext = e.context ?? []
+      return { text: e.text }
+    })
+    await begin($, surface)
+    await interject($, surface, 'Which plate?', 'enter')
+    const first = await $.ui.mount(MESSAGE(surface))
+    await first.unmount()
+    world.selection = { text: 'It sits under the tank.', requestId: 'm1' }
+    await interject($, surface, 'Which tank?', 'enter')
+    const second = await $.ui.mount(MESSAGE(surface))
+    await second.unmount()
+    world.selection = { text: 'It holds 40 litres.', requestId: 'm1' }
+    await interject($, surface, 'Of what?', 'enter')
+
+    const message = await $.ui.mount(MESSAGE(surface))
+    expect(await message.find({ type: 'Text', text: /\? Of what\?/ })).toBeDefined()
+    // A box's buttons follow the boxes inside it: the first keep is the
+    // innermost box's, the last dismiss the outermost's.
+    await message.press({ key: await firstKey(message, 'keep-') })
+    expect(await message.find({ type: 'Text', text: /Kept: goes with/ })).toBeDefined()
+    const dismisses = (await message.findAll({ type: 'Button' })).map(b => b.key ?? '').filter(k => k.startsWith('dismiss-'))
+    expect(dismisses.length).toBe(3)
+    await message.press({ key: dismisses.at(-1) ?? '' })
+    expect(await message.find({ type: 'Text', text: /\? Of what\?/ })).toBeUndefined()
+
+    await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+    expect(sentContext.join('\n')).not.toContain('Of what?')
+    await message.unmount()
+  })
 }
 
 for (const surface of ['terminal', 'desktop'] as const) {
