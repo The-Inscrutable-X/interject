@@ -1,0 +1,6 @@
+{
+  "name": "interject",
+  "version": "0.1.0",
+  "description": "Interject at a line of Claude's reply: ask a side question answered at that line, or attach a note to your next message",
+  "types": "./types/index.d.ts"
+}

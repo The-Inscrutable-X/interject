@@ -1,0 +1,4 @@
+{
+  "description": "The interject hooks module",
+  "modules": ["./register.tsx"]
+}

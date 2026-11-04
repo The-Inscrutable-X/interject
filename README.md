@@ -1,0 +1,157 @@
+# interject
+
+A Claude Code mod (an add-on that changes Claude Code's own screen) for
+when you get lost partway through a long reply. Stop at any line, even
+while Claude is still writing, and interject right there.
+
+## How to use it
+
+1. **Pick a line.** Select it with the mouse (click and drag, or
+   triple-click for the whole line). A **✎ Interject here** button appears
+   just above the prompt box: click it. Or type `/interject` and press
+   Enter. With nothing selected, `/interject` lists the lines of the last
+   reply instead: in Desktop and VS Code at the end of that reply, below
+   what you are reading, so nothing moves; in the terminal in a small panel
+   (arrow keys and Enter, or click). **Earlier reply** goes back one reply.
+2. **Type your question.** In Claude Code Desktop and VS Code a form opens
+   right under your line, inside the reply: click its field and type. The
+   side panel never opens there. In the terminal, where a reply can't take typing, a small panel opens instead,
+   with your line quoted at the top.
+3. **Choose what happens:**
+   - **Ask on the side** (or just press Enter): a **side chat**. A fork of
+     the conversation works on your question in the background, and can use
+     tools to do it (read files, run commands, search). The box under your
+     line shows what it is doing, then its answer. The question, the work and
+     the answer are **never added to the conversation**. In a Desktop
+     session in auto mode the session won't start the side agent: Desktop
+     gives its sessions auto mode rules of their own, and with rules set,
+     Claude Code puts an agent a mod starts to the server-side check, which
+     only judges calls one of Claude's replies asked for. There the side chat
+     runs as a separate Claude Code process instead: `claude -p` forking this
+     conversation (`--resume <this session> --fork-session`), unsaved, in
+     auto mode, where auto mode judges each tool call against your question.
+     It has the whole conversation and the same tools, but it doesn't share
+     the session's prompt cache, so on a long conversation its first request
+     costs more. Outside auto mode it runs in default mode, where a tool call
+     that would need your approval is refused, since nobody can be asked
+     there. If that can't start either, the answer comes from one plain model
+     call over the conversation, without tools, and the box says so.
+   - **Quick answer (no tools)**: the same box, answered in a few seconds
+     by one request over the conversation, with no tools. Its box offers
+     **ask again with tools** when it needs to look something up. The
+     small **Enter ↵** beside the field is Desktop's hint for what Enter
+     does: the same as **Ask on the side**.
+   - **Add to my next message**: the box says it will be attached. When you
+     next send a message, the quoted line and your note go with it as extra
+     context. The box then says "Attached".
+   - **Cut here and continue**: everything in the reply after your line is
+     withdrawn. If Claude is still writing, it is stopped. Your interjection
+     is sent for you, and Claude answers it and continues the reply from
+     that line. The rest of the old reply is hidden behind a
+     "✂ The rest of this reply … was cut" line.
+   - **Cancel**, or press Esc.
+
+**Interject on interjections.** A side answer is text like any other:
+select a line inside its box and interject again. The new box sits at that
+line of the answer, and all three choices carry the whole chain (your
+first line, each question and answer so far, and the new line). Under
+each side answer there are also:
+
+- **follow up**: another question about the same line, with the earlier
+  ones as context;
+- **ask again with tools** (on a quick answer): the same question, now by a
+  side chat that can use tools;
+- **keep**: the question and answer go with your next message;
+- **fork to session** (Desktop): the side chat goes on as a session of its
+  own, forked from the conversation, named "Side chat: …". The mod asks
+  Desktop for a **New task** card at the end of the conversation; press
+  Start on it and the fork opens listed under this session, with the side
+  chat as its brief. Nothing starts or costs anything until you press Start.
+  In auto mode this needs one allow rule (below), because auto mode refuses
+  a tool call a mod makes. Without it, the mod forks it with Claude Code
+  itself (`claude -p --resume <this session> --fork-session`, one short
+  turn, which doesn't share this session's prompt cache) and opens it with
+  Desktop's Resume link: it opens at once as a session of its own, not
+  under this one;
+- **dismiss**: removes the box (and boxes inside it), and stops a side chat
+  that is still working.
+
+### Fork to session in auto mode
+
+Add Desktop's session tool to your allow rules in `~/.claude/settings.json`:
+
+```json
+{ "permissions": { "allow": ["mcp__ccd_session__start_session"] } }
+```
+
+Auto mode then lets the mod show the New task card. The rule covers Claude's
+own calls to that tool too: Desktop's own checks still apply (it starts a
+session at once only when you asked for it in your own words, and otherwise
+shows a card for you to start).
+
+From the keyboard: `/interject followup` and `/interject keep` act on the
+latest side answer, and `/interject clear` removes every box.
+
+Boxes are saved per session: resuming a session (`claude --resume`) brings
+them back.
+
+## Setup
+
+The mod is listed in `~/.claude/settings.json` under `env`, as
+`CLAUDE_CODE_PLUGIN_DIRS` (this folder) and
+`CLAUDE_CODE_PLUGIN_DIR_WATCH` (`1`: reload it when its files change). So
+every Claude Code session started from now on loads it, in the terminal
+and in the Desktop app's Code tab. Sessions already running don't. To turn
+it off, delete those two lines.
+
+For mouse selection in the terminal, fullscreen rendering must be on: type
+`/tui` to check and `/tui fullscreen` to switch. In iTerm2, mouse reporting
+must be on (Settings, Profiles, Terminal).
+
+## What goes where
+
+| | Side question | Add to my next message | Cut here and continue |
+|---|---|---|---|
+| Shown at the line | question and answer | note and its status | your interjection; the rest of the reply hidden |
+| Added to the conversation | no | yes, with your next message | yes, at once, as a message from you |
+| Sent to the model | a fork's own run: the conversation so far, the reply up to your line, any earlier questions in the chain, and the tool calls it makes | nothing until your next message | a new message: your line, the reply up to it, the chain, your interjection |
+
+A side chat is a background agent: it starts from the conversation's prompt
+cache, then costs what its own work costs (a question that needs no tools
+is one request; one that reads files and runs commands is several), and it
+counts toward your plan's usage like any request. While it works it shows in
+the app's list of background tasks; when it finishes, the notice the
+conversation would get is dropped, so the main thread never hears of it.
+
+## Limits
+
+- **A cut is an instruction, not a deletion.** Claude Code doesn't let a
+  mod delete a saved reply. Claude is told the rest is withdrawn and the
+  screen hides it, but a finished reply's full text stays in the
+  conversation's memory. One exception: if you cut while Claude is still
+  writing that part, the mod saves it ending at your line.
+- **A cut doesn't undo work.** Files Claude changed or commands it ran after
+  that line stay changed. Use `/rewind` for that.
+- **Cutting an older reply** continues at the end of the conversation; the
+  turns that came after that reply stay.
+- **Clicking a line without selecting it** isn't possible: Claude Code only
+  reports clicks on buttons and links, and turning every line into a button
+  would lose the reply's formatting. Selecting, then clicking ✎, is the
+  closest.
+- **Typing `/interject` scrolls to the bottom**, because typing in the
+  prompt box does that in Claude Code. The ✎ button avoids it.
+- **Matching a selection to its line** uses a simple text comparison. Lines
+  with links or unusual formatting may not match; the panel then offers the
+  list of lines instead.
+- **The ✎ button** shows in the terminal and the Desktop app, not in VS
+  Code (Claude Code has no space above the prompt there); use `/interject`.
+- **The buttons inside a box** (follow up, keep, dismiss) need a mouse:
+  fullscreen terminal, Desktop or VS Code. The keyboard forms are above.
+
+## Files
+
+- `.claude-plugin/plugin.json`: the mod's name and description
+- `hooks/hooks.json`: points Claude Code at the code file
+- `hooks/register.tsx`: all of the mod's code
+- `types/index.d.ts`: the shape of the values the mod keeps (the boxes, the draft being typed, the current selection)
+- `tests/interject.test.tsx`: automated tests (`claude plugin test .` in this folder)
