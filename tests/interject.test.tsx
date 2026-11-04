@@ -53,7 +53,7 @@ type World = ReturnType<typeof engine>['world']
 let last: World
 
 /** The world beneath the plugin, drawing on `surface`. `world.selection` is what the mouse last selected. */
-function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal') {
+function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal', store?: Map<string, unknown>) {
   const world: {
     selection?: { text: string; requestId?: string }
     answers: string[]
@@ -92,7 +92,23 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal')
   }
   last = world
   const clock = mock.clock(on)
-  mock.store(on)
+  if (store === undefined) mock.store(on)
+  else {
+    // A store the test can read, refusing a set past 4 MiB of JSON in all, as the engine's does.
+    const size = (m: Map<string, unknown>) => [...m.values()].reduce((n: number, v) => n + JSON.stringify(v).length, 0)
+    on('store.get', (_, e) => ({ value: store.get(e.key) }))
+    on('store.keys', () => ({ value: [...store.keys()] }))
+    on('store.delete', (_, e) => {
+      store.delete(e.key)
+      return { value: undefined }
+    })
+    on('store.set', (_, e) => {
+      const next = new Map(store).set(e.key, JSON.parse(JSON.stringify(e.value)))
+      if (size(next) > 4 * 1024 * 1024) return { deny: 'The store is over 4 MiB' } as never
+      store.set(e.key, next.get(e.key))
+      return { value: undefined }
+    })
+  }
   on('command.register', () => ({ value: { command: 'interject' } }))
   on('ui.open', (_, e) => {
     world.opened.push(e.id)
@@ -350,6 +366,36 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     await message.unmount()
   })
 }
+
+test('boxes are saved for every session, with no cap on sessions; a full store lets the oldest go', async ($, on) => {
+  const store = new Map<string, unknown>()
+  const { world } = engine(on, 'terminal', store)
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  const box = (s: string, answer = 'a') => [{ id: s, mode: 'side', status: 'answered', question: 'q', quote: LINE, answer }]
+  // Forty earlier sessions with boxes, the oldest big enough to nearly fill the store.
+  const old = Array.from({ length: 40 }, (_, i) => 'old' + i)
+  for (const s of old) store.set('notes:' + s, box(s))
+  store.set('notes:huge', box('huge', 'x'.repeat(4 * 1024 * 1024 - 20_000)))
+  store.set('sessions', ['huge', ...old, 'gone'])
+
+  await begin($, 'terminal')
+  // Every session that has boxes stays listed; one with none saved is dropped.
+  expect(store.get('sessions')).toEqual(['huge', ...old, 's1'])
+
+  // This session's boxes do not fit beside the huge one: the oldest goes, the rest stay.
+  world.answers.push('y'.repeat(30_000))
+  await interject($, 'terminal', 'Which plate?', 'enter')
+  expect(store.has('notes:huge')).toBe(false)
+  expect(store.has('notes:old0')).toBe(true)
+  expect(store.has('notes:old39')).toBe(true)
+  expect(JSON.stringify(store.get('notes:s1'))).toContain('Which plate?')
+  expect(store.get('sessions')).toEqual([...old, 's1'])
+
+  // Clearing them leaves nothing saved for this session.
+  await $.command.run({ command: 'interject', args: 'clear' })
+  expect(store.has('notes:s1')).toBe(false)
+})
 
 test('a box at a table row splits the table into two tables, the header drawn again', async ($, on) => {
   const { world } = engine(on, 'terminal')

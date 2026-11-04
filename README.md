@@ -83,7 +83,11 @@ line of the latest reply; `/interject followup`, `/interject keep` and
 every box.
 
 Boxes are saved per session: resuming a session (`claude --resume`) brings
-them back.
+them back. Every session's boxes are kept (the last 100 of each) until you
+remove them with `/interject clear` or dismiss. They live in the mod's store,
+`~/.claude/plugins/store/interject_*.json`, which Claude Code caps at 4 MiB in
+all; when it is full, the oldest sessions' boxes are removed to make room, and
+a notice says so.
 
 ## Setup
 

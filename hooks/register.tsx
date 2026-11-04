@@ -404,10 +404,40 @@ async function newId($: EngineInterface): Promise<string> {
   return String(await $.clock.now()) + '-' + Math.random().toString(36).slice(2, 7)
 }
 
-/** Changes the boxes, and saves them for this session so a resume brings them back. */
+/**
+ * Changes the boxes, and saves them for this session so a resume brings them
+ * back. Every session's boxes are kept until removed; only when the store is
+ * full (4 MiB in all) are the oldest other sessions' boxes let go to make room.
+ */
 async function setNotes($: EngineInterface, change: (list: InterjectNote[]) => InterjectNote[]): Promise<void> {
   const list = await update($, notes, change)
-  await $.store.set('notes:' + (await $.session.id()), list.slice(-100))
+  const id = await $.session.id()
+  if (list.length === 0) {
+    await $.store.delete('notes:' + id)
+    return
+  }
+  const index = await $.store.get('sessions')
+  const others = Array.isArray(index) ? index.filter((s): s is string => typeof s === 'string' && s !== id) : []
+  let dropped = 0
+  for (;;) {
+    try {
+      await $.store.set('notes:' + id, list.slice(-100))
+      break
+    } catch {
+      // Over the store's 4 MiB: make room from the oldest session.
+      const oldest = others.shift()
+      if (oldest === undefined) {
+        $.ui.toast("Interject could not save this session's boxes: its storage is full.")
+        return
+      }
+      await $.store.delete('notes:' + oldest)
+      dropped += 1
+    }
+  }
+  if (dropped > 0) {
+    await $.store.set('sessions', [...others, id])
+    $.ui.toast('Interject storage was full: removed the boxes of the ' + dropped + ' oldest ' + (dropped === 1 ? 'session.' : 'sessions.'))
+  }
 }
 
 async function openPane($: EngineInterface, rows: number): Promise<void> {
@@ -1105,13 +1135,14 @@ export const register: Register = on => {
       immediate: true,
     })
 
-    // Bring back this session's boxes after a resume, and forget old sessions'.
+    // Bring back this session's boxes after a resume. The index lists, oldest
+    // first, the sessions that have boxes saved, this one last.
     const id = await $.session.id()
     const index = await $.store.get('sessions')
-    const known = Array.isArray(index) ? index.filter((s): s is string => typeof s === 'string' && s !== id) : []
-    const kept = [...known, id].slice(-30)
-    for (const old of known.filter(s => !kept.includes(s))) await $.store.delete('notes:' + old)
-    await $.store.set('sessions', kept)
+    const listed = Array.isArray(index) ? index.filter((s): s is string => typeof s === 'string' && s !== id) : []
+    const withBoxes: string[] = []
+    for (const s of listed) if (Array.isArray(await $.store.get('notes:' + s))) withBoxes.push(s)
+    await $.store.set('sessions', [...withBoxes, id])
     const saved = await $.store.get('notes:' + id)
     if (Array.isArray(saved) && saved.length > 0 && (await read($, notes)).length === 0) {
       const restored = (saved as InterjectNote[]).map((n): InterjectNote =>
