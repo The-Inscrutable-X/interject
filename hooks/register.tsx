@@ -761,6 +761,8 @@ function forkBrief(list: InterjectNote[], n: InterjectNote): string {
     'This session is a fork of a side chat. In the conversation above, the user stopped reading a reply at one line and asked on the side; that side chat was answered in a box at the line, outside the conversation. It goes on here, as a conversation of its own: the user will reply in this session.',
     '',
     ...chainText(chainOf(list, n.id)),
+    '',
+    'This is not a task: carry on with nothing from the conversation above, and use no tools now. Reply with one short line saying you are ready to go on with this side chat, then wait for the user.',
   ].join('\n')
 }
 
@@ -850,7 +852,7 @@ async function forkByLink($: EngineInterface, prompt: string, title: string, mod
       [
         'claude',
         '-p',
-        prompt + '\n\nFor now, reply with one short line saying you are ready to go on, and use no tools.',
+        prompt,
         '--resume',
         await $.session.id(),
         '--fork-session',
