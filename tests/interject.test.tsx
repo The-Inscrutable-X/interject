@@ -376,6 +376,17 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(submitted).toContain('My interjection: Why turn it?')
     expect(submitted).not.toContain('Finally the server saves the run.')
 
+    // The part being written is stored ending at the line.
+    const stored = await $.session.append({
+      message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text: REPLY }] },
+      door: 'response',
+      origin: { kind: 'model', model: 'claude-opus-5-5' },
+      uuid: 'row-1',
+    })
+    const storedText = JSON.stringify(stored.message?.content)
+    expect(storedText).toContain('turns the plate.')
+    expect(storedText).not.toContain('Finally the server saves the run.')
+
     const message = await $.ui.mount(MESSAGE(surface))
     expect(await message.find({ type: 'Text', text: /The rest of this reply \(1 line\) was cut/ })).toBeDefined()
     expect(await message.find({ type: 'Text', text: /✂ Why turn it\?/ })).toBeDefined()

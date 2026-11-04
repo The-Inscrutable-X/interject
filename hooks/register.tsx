@@ -1347,10 +1347,12 @@ export const register: Register = on => {
   })
 
   // A cut made while Claude was writing: the part being written is stored
-  // ending at the line, so Claude never reads what came after it.
-  on('session.append', async ($, e, next) => {
+  // ending at the line, so Claude never reads what came after it. Narrowed to
+  // Claude's replies, so a managed plugin that sends other rows straight on
+  // past the user tier does not report this hook skipped on each of them.
+  on('session.append', { door: 'response' }, async ($, e, next) => {
     const cut = pendingCut
-    if (cut === undefined || e.agentId !== undefined || e.door !== 'response' || e.message.role !== 'assistant') {
+    if (cut === undefined || e.agentId !== undefined || e.message.role !== 'assistant') {
       return next(e)
     }
     const blocks = e.message.content
