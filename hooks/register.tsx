@@ -1334,7 +1334,7 @@ export const register: Register = on => {
 
       const icon = n.mode === 'side' ? '? ' : n.mode === 'queue' ? '+ ' : '✂ '
       const box = (
-        <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
+        <Box flexDirection="column" minWidth={0} borderStyle="round" borderColor="warning" paddingX={1}>
           <Text color="warning" weight="semibold">
             {icon + n.question}
           </Text>
@@ -1385,14 +1385,18 @@ export const register: Register = on => {
         parts.push(await next({ ...e, props: { ...e.props, text: segment } }))
       } else if (segment.trim() !== '') {
         parts.push(
-          <Box paddingLeft={indent}>
+          <Box flexDirection="column" minWidth={0} paddingLeft={indent}>
             <Markdown text={segment} />
           </Box>,
         )
       }
       for (const n of here) {
         const drawn = drawNote(n, 1)
-        parts.push(<Box marginLeft={indent}>{drawn.box}</Box>)
+        parts.push(
+          <Box flexDirection="column" minWidth={0} marginLeft={indent}>
+            {drawn.box}
+          </Box>,
+        )
         isCut = isCut || drawn.isCut
       }
       if (hasForm === true && formBox !== undefined && !isCut) {
@@ -1408,9 +1412,17 @@ export const register: Register = on => {
 
     const rest = text.slice(from).replace(/^\n+/, '')
     if (rest.trim() !== '') {
-      parts.push(<Box paddingLeft={indent}>{isCut ? cutLine(rest, 'reply') : <Markdown text={pieceOf(text, from)} />}</Box>)
+      parts.push(
+        <Box flexDirection="column" minWidth={0} paddingLeft={indent}>
+          {isCut ? cutLine(rest, 'reply') : <Markdown text={pieceOf(text, from)} />}
+        </Box>,
+      )
     }
-    return <Box flexDirection="column">{parts}</Box>
+    return (
+      <Box flexDirection="column" minWidth={0}>
+        {parts}
+      </Box>
+    )
   })
 
   // The message a cut sends for the person: drawn as one short line.

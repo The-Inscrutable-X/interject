@@ -397,6 +397,23 @@ test('boxes are saved for every session, with no cap on sessions; a full store l
   expect(store.has('notes:s1')).toBe(false)
 })
 
+test('a reply with boxes fits its width: every Box says its direction, the boxes may shrink (desktop)', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  world.answers.push('A long answer line that a desktop would otherwise draw on one line, wider than the reply. '.repeat(8))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Which plate?', 'enter')
+  const message = await $.ui.mount(MESSAGE('desktop'))
+  const boxes = await message.findAll({ type: 'Box' })
+  expect(boxes.length).toBeGreaterThan(2)
+  // A Box left on the default row takes its content's width on a desktop, past the reply's edge.
+  for (const b of boxes) expect((b.props as { flexDirection?: string }).flexDirection).toBeDefined()
+  const bordered = boxes.find(b => (b.props as { borderStyle?: string }).borderStyle === 'round')
+  expect((bordered?.props as { minWidth?: number }).minWidth).toBe(0)
+  await message.unmount()
+})
+
 test('a box at a table row splits the table into two tables, the header drawn again', async ($, on) => {
   const { world } = engine(on, 'terminal')
   const TABLE = [
