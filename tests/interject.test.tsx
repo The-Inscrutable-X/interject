@@ -71,8 +71,8 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal')
     spawnTries: number
     /** Whether starting a session at once is refused, as from a press on a box. */
     startOnlyOnWords?: boolean
-    /** Whether auto mode's check refuses the app's session tool, as with no allow rule for it. */
-    sessionToolDenied?: boolean
+    /** How many calls to the app's session tool auto mode's check refuses, as it does a plugin's. */
+    sessionToolDenials?: number
     /** What a headless fork writes, line by line; absent, starting one fails. */
     childLines?: string[]
     /** Each process started, by its argv. */
@@ -139,7 +139,8 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal')
   on('tool.call', (_, e) => {
     const input = e as unknown as Record<string, unknown>
     world.tools.push({ tool: e.tool, input })
-    if (world.sessionToolDenied && e.tool === 'mcp__ccd_session__start_session') {
+    if ((world.sessionToolDenials ?? 0) > 0 && e.tool === 'mcp__ccd_session__start_session') {
+      world.sessionToolDenials = (world.sessionToolDenials ?? 0) - 1
       return { deny: 'The server-side auto mode classifier gave no verdict for mcp__ccd_session__start_session' } as never
     }
     // As Desktop does outside a turn the person's own typed message began.
@@ -655,33 +656,88 @@ test('fork to session: a New task card that opens the side chat under this sessi
   expect(await firstKey(message, 'fork-')).toBe('')
   await message.unmount()
 })
-test('fork to session where auto mode refuses the card: a saved CLI fork, opened in the app by its Resume link', async ($, on) => {
+const FORK_ID = '0f0e0d0c-1111-2222-3333-444455556666'
+
+/** A Desktop session with an answered side chat, where `process.run` records each argv. */
+async function forkWorld(
+  $: Parameters<Parameters<typeof test>[1]>[0],
+  on: Parameters<Parameters<typeof test>[1]>[1],
+  submit: (text: string, asUser: true | undefined) => { text: string } | { drop: string },
+) {
   const { world } = engine(on, 'desktop')
+  world.sessionToolDenials = 1
+  on('prompt.submit', (_, e) => submit(e.text, e.origin.kind === 'plugin' ? e.origin.asUser : undefined) as never)
   world.selection = { text: LINE, requestId: 'm1' }
-  world.sessionToolDenied = true
   world.answers.push('The round feedplate.')
   const runs: string[][] = []
   on('process.run', (_, e) => {
     runs.push([...e.argv])
-    const stdout = e.argv[0] === 'claude' ? JSON.stringify({ type: 'result', session_id: '0f0e0d0c-1111-2222-3333-444455556666' }) : ''
+    const stdout = e.argv[0] === 'claude' ? JSON.stringify({ type: 'result', session_id: FORK_ID }) : ''
     return { value: { exitCode: 0, stdout, stderr: '' } } as never
   })
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
   await begin($, 'desktop')
   await interject($, 'desktop', 'Which plate?', 'enter')
+  return { world, runs }
+}
 
+async function settled(runs: string[][]) {
+  for (let i = 0; i < 20 && !runs.some(r => r[0] === 'open'); i++) await new Promise(r => setTimeout(r, 5))
+}
+
+test('fork to session in auto mode: the mod asks Claude, as the person, to put up the card', async ($, on) => {
+  const sent: { text: string; asUser?: true }[] = []
+  const { runs } = await forkWorld($, on, (text, asUser) => {
+    sent.push({ text, asUser })
+    return { text }
+  })
   const message = await $.ui.mount(MESSAGE('desktop'))
   await message.press({ key: await firstKey(message, 'fork-') })
+  expect(sent.length).toBe(1)
+  expect(sent[0]?.asUser).toBe(true)
+  expect(sent[0]?.text).toContain('Fork the side chat "Which plate?" into a session of its own.')
+  expect(sent[0]?.text).toContain('initiation "own_initiative", context "fork", title "Side chat: Which plate?"')
+  expect(sent[0]?.text).toContain('The round feedplate.')
+  await message.redraw()
+  expect(await message.find({ type: 'Text', text: /Asking Claude for a New task card/ })).toBeDefined()
+
+  // Claude's own call, in the turn the message began.
+  await $.turn.start({ text: sent[0]?.text ?? '', turnId: 't7' })
+  await $.tool.call({ tool: 'mcp__ccd_session__start_session', initiation: 'own_initiative', context: 'fork', title: 'Side chat: Which plate?', prompt: 'brief' } as never)
+  await $.turn.complete({ turnId: 't7', answer: 'The card is up.', durationMs: 1, isAborted: false, reason: 'answer' })
+  await message.redraw()
+  expect(await message.find({ type: 'Text', text: /Press Start on the New task card/ })).toBeDefined()
+  expect(runs).toEqual([])
+  await message.unmount()
+})
+
+test('fork to session: a turn that ends with no card ends in a fork of its own, by the Resume link', async ($, on) => {
+  const { runs } = await forkWorld($, on, text => ({ text }))
+  const message = await $.ui.mount(MESSAGE('desktop'))
+  await message.press({ key: await firstKey(message, 'fork-') })
+  await $.turn.start({ text: 'fork', turnId: 't8' })
+  expect(runs).toEqual([])
+  await $.turn.complete({ turnId: 't8', answer: 'No tool for that.', durationMs: 1, isAborted: false, reason: 'answer' })
+  await settled(runs)
   const fork = runs.find(r => r[0] === 'claude') ?? []
   expect(fork[2]).toContain('The round feedplate.')
   expect(fork).toContain('--fork-session')
   expect(fork[fork.indexOf('--resume') + 1]).toBe('s1')
   expect(fork[fork.indexOf('--name') + 1]).toBe('Side chat: Which plate?')
-  expect(runs.find(r => r[0] === 'open')).toEqual(['open', 'claude://resume?session=0f0e0d0c-1111-2222-3333-444455556666'])
+  expect(runs.find(r => r[0] === 'open')).toEqual(['open', 'claude://resume?session=' + FORK_ID])
   await message.redraw()
   expect(await message.find({ type: 'Text', text: /it opened in Claude/ })).toBeDefined()
   await message.unmount()
 })
 
+test('fork to session: where the request cannot be sent, a fork of its own at once', async ($, on) => {
+  const { runs } = await forkWorld($, on, () => ({ drop: 'not now' }))
+  const message = await $.ui.mount(MESSAGE('desktop'))
+  await message.press({ key: await firstKey(message, 'fork-') })
+  await settled(runs)
+  expect(runs.find(r => r[0] === 'open')).toEqual(['open', 'claude://resume?session=' + FORK_ID])
+  await message.unmount()
+})
 test('Desktop: a message sent from its own box takes what was added to the next message', async ($, on) => {
   const { world } = engine(on, 'desktop')
   world.selection = { text: LINE, requestId: 'm1' }

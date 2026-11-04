@@ -38,6 +38,8 @@ export type InterjectNote = {
   noTools?: string
   /** Set once the side chat was forked into a session of its own: what its box says. */
   forked?: string
+  /** Set while Claude, asked in a message the mod sent, is putting up the fork's New task card. */
+  forkAsk?: 'sent'
 }
 
 /** The interjection being written: in the panel, or in a form under its line. */
