@@ -63,19 +63,17 @@ each side answer there are also:
   side chat that can use tools;
 - **keep**: the question and answer go with your next message;
 - **fork to session** (Desktop): the side chat goes on as a session of its
-  own, forked from the conversation, named "Side chat: …", with the side
-  chat as its brief. It comes as Desktop's **New task** card at the end of
-  the conversation: press Start on it and the fork opens listed under this
-  session. Nothing starts until you press Start.
-  The mod first asks Desktop for the card itself; outside auto mode Desktop
-  may ask you to allow that. In auto mode Desktop's session tool is "always
-  ask" (no allow rule changes that) and auto mode refuses a call a mod makes,
-  so the mod instead sends the request as your message, shown as one line
-  ("⑂ Fork to session: …"), and Claude puts up the card: one short turn in
-  this conversation. If no card comes of it, the mod forks it with Claude
-  Code itself (`claude -p --resume <this session> --fork-session`, one short
-  turn, which doesn't share this session's prompt cache) and opens it with
-  Desktop's Resume link, as a session of its own, not under this one;
+  own, forked from the conversation, named "Side chat: …". The mod asks
+  Desktop for a **New task** card at the end of the conversation; press
+  Start on it and the fork opens listed under this session, with the side
+  chat as its brief. Nothing starts or costs anything until you press Start.
+  Nothing is sent in your conversation either way.
+  In auto mode Desktop's session tool is "always ask" and auto mode refuses
+  it to a mod (no allow rule changes that), so there the mod forks it with
+  Claude Code itself (`claude -p --resume <this session> --fork-session`,
+  one short turn, which doesn't share this session's prompt cache) and
+  opens it with Desktop's Resume link: it opens at once as a session of its
+  own, not under this one;
 - **dismiss**: removes the box (and boxes inside it), and stops a side chat
   that is still working.
 

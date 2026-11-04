@@ -33,7 +33,6 @@ import type { InterjectDraft, InterjectNote, InterjectPicked } from '../types'
 
 const PANE = 'interject'
 const MARK = '[interject: cut and continue]'
-const FORK_MARK = '[interject: fork to session]'
 // The desktop app's tool that starts a session: a side chat forked out is one.
 const START_SESSION = 'mcp__ccd_session__start_session'
 const MAX_DEPTH = 4
@@ -53,8 +52,6 @@ const picked = atom({ plugin: 'interject', key: 'picked' } as const, null as Int
 const seen = new Map<string, string>()
 // The main conversation's running turn, so a cut can stop it.
 let running: string | undefined
-/** The main turn that reads a fork request the mod sent; null until it starts. */
-let forkTurn: string | null | undefined
 // A cut made while Claude was writing: the line where the stored reply ends.
 let pendingCut: { quote: string; turnId: string } | undefined
 // The selection last shown on the band, so it is drawn once per selection.
@@ -774,68 +771,24 @@ function forkBrief(list: InterjectNote[], n: InterjectNote): string {
  */
 async function forkOut($: EngineInterface, n: InterjectNote): Promise<void> {
   const prompt = forkBrief(await read($, notes), n)
-  await setForked($, n.id, 'Forking it…')
-  if ((await forkByCard($, n, prompt)) === true) {
-    await setForked($, n.id, CARD_UP)
+  const setForked = (forked: string | undefined) =>
+    setNotes($, all => all.map((m): InterjectNote => (m.id === n.id ? { ...m, forked } : m)))
+  await setForked('Forking it…')
+  const card = await forkByCard($, n, prompt)
+  if (card === true) {
+    await setForked('Press Start on the New task card at the end of the conversation: the side chat opens as a session under this one.')
     return
   }
-  if (await askForCard($, n, prompt)) return
-  forkOnItsOwn($, n, prompt)
-}
-
-const CARD_UP = 'Press Start on the New task card at the end of the conversation: the side chat opens as a session under this one.'
-
-/** What a fork's box says, and whether Claude is putting up its card. */
-function setForked($: EngineInterface, id: string, forked: string | undefined, forkAsk?: 'sent') {
-  return setNotes($, all => all.map((m): InterjectNote => (m.id === id ? { ...m, forked, forkAsk } : m)))
-}
-
-/** The request the mod sends for the person, as their message: one line, then what Claude needs. */
-function forkRequest(n: InterjectNote, prompt: string): string {
-  return [
-    FORK_MARK,
-    'Fork the side chat "' + clip(n.question, 80) + '" into a session of its own.',
-    '',
-    'I pressed "fork to session" on a side chat answered in a box at a line of your reply, outside this conversation. Show me a New task card for it now: call mcp__ccd_session__start_session with initiation "own_initiative", context "fork", title ' +
-      JSON.stringify(forkTitle(n)) +
-      ', and as the prompt the brief below, word for word. Do nothing else; then reply in one short line.',
-    '',
-    '<brief>',
-    prompt,
-    '</brief>',
-  ].join('\n')
-}
-
-/**
- * Asks Claude for the card, in a message sent for the person: auto mode
- * refuses the card from the mod's own call (the app marks its session tool
- * "always ask", above any allow rule, and auto mode's check takes no call a
- * plugin makes), but lets Claude make it on the person's request. False when
- * the message was not sent.
- */
-async function askForCard($: EngineInterface, n: InterjectNote, prompt: string): Promise<boolean> {
-  const watching = forkTurn
-  forkTurn = null
-  await setForked($, n.id, running === undefined ? 'Asking Claude for a New task card…' : 'Asking Claude for a New task card, once its turn ends…', 'sent')
-  const sent = await $.prompt.submit({ text: forkRequest(n, prompt), asUser: true })
-  if (sent.drop === undefined) return true
-  forkTurn = watching
-  await setForked($, n.id, undefined)
-  return false
-}
-
-/** A fork of its own, opened in the app by its Resume link: where no card could be shown. */
-function forkOnItsOwn($: EngineInterface, n: InterjectNote, prompt: string): void {
+  await setForked('Forking it into a session of its own…')
   // Runs on after the press: the fork takes one request over the whole conversation.
   void (async () => {
-    await setForked($, n.id, 'Forking it into a session of its own…')
     // A side chat that had to run outside the session is in auto mode; the fork keeps it.
     if (await forkByLink($, prompt, forkTitle(n), n.outside === true ? 'auto' : 'default')) {
-      await setForked($, n.id, 'Forked into a session of its own: it opened in Claude, and it is in the sidebar.')
+      await setForked('Forked into a session of its own: it opened in Claude, and it is in the sidebar.')
       return
     }
-    await setForked($, n.id, undefined)
-    $.ui.toast('The side chat was not forked')
+    await setForked(undefined)
+    $.ui.toast('The side chat was not forked: ' + clip(card, 120))
   })()
 }
 
@@ -1106,10 +1059,8 @@ export const register: Register = on => {
   })
 
   on('turn.start', ($, e, next) => {
-    if (e.agentId === undefined) {
-      running = e.turnId
-      if (forkTurn === null) forkTurn = e.turnId
-    } else agentTurns.set(e.agentId, e.turnId)
+    if (e.agentId === undefined) running = e.turnId
+    else agentTurns.set(e.agentId, e.turnId)
     return next(e)
   })
 
@@ -1117,12 +1068,6 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       if (e.turnId === running) running = undefined
       if (pendingCut !== undefined && pendingCut.turnId !== e.turnId) pendingCut = undefined
-      if (forkTurn === e.turnId) {
-        // The turn that read a fork request ended with no card: a fork of its own.
-        forkTurn = undefined
-        const list = await read($, notes)
-        for (const n of list.filter(m => m.forkAsk === 'sent')) forkOnItsOwn($, n, forkBrief(list, n))
-      }
     } else {
       await sideFinished($, e.agentId, e)
     }
@@ -1138,19 +1083,7 @@ export const register: Register = on => {
         list.map((n): InterjectNote => (n.agentId === agentId ? { ...n, steps: [...(n.steps ?? []), step].slice(-6) } : n)),
       )
     }
-    // The app's tool is connected at run time, not in the tool types this mod is built against.
-    if ((e.tool as string) !== START_SESSION || agentId !== undefined) return next(e)
-
-    // Claude putting up the card the mod asked for: its box says how it went.
-    const title = (e as unknown as Record<string, unknown>).title
-    const list = await read($, notes)
-    const asked = list.find(n => n.forkAsk === 'sent' && title === forkTitle(n))
-    const result = await next(e)
-    if (asked !== undefined) {
-      if (result.deny === undefined && result.isError !== true) await setForked($, asked.id, CARD_UP)
-      else forkOnItsOwn($, asked, forkBrief(list, asked))
-    }
-    return result
+    return next(e)
   })
 
   // /interject: start an interjection at the selected line, or offer a list.
@@ -1378,18 +1311,9 @@ export const register: Register = on => {
   // The message a cut sends for the person: drawn as one short line.
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     const origin = e.props.origin
-    if (e.props.isExpanded || origin.kind !== 'plugin' || origin.name !== 'interject') return next(e)
-    if (e.props.text.startsWith(FORK_MARK)) {
-      const asked = /^Fork the side chat "(.*)" into a session of its own\.$/m.exec(e.props.text)?.[1] ?? ''
-      const { Box, Text } = $.ui.resolve(e)
-      return (
-        <Box>
-          <Text color="warning">{'⑂ Fork to session: '}</Text>
-          <Text>{asked}</Text>
-        </Box>
-      )
+    if (e.props.isExpanded || origin.kind !== 'plugin' || origin.name !== 'interject' || !e.props.text.startsWith(MARK)) {
+      return next(e)
     }
-    if (!e.props.text.startsWith(MARK)) return next(e)
     const question = /^My interjection: (.*)$/m.exec(e.props.text)?.[1] ?? ''
     const { Box, Text } = $.ui.resolve(e)
     return (
