@@ -411,6 +411,10 @@ test('a reply with boxes fits its width: every Box says its direction, the boxes
   for (const b of boxes) expect((b.props as { flexDirection?: string }).flexDirection).toBeDefined()
   const bordered = boxes.find(b => (b.props as { borderStyle?: string }).borderStyle === 'round')
   expect((bordered?.props as { minWidth?: number }).minWidth).toBe(0)
+  // The root holds the engine's own drawing of the first part: Desktop refuses
+  // an engine node under a Box with a size, so the root has none.
+  const root = boxes[0]?.props as Record<string, unknown>
+  for (const size of ['width', 'height', 'minWidth', 'minHeight']) expect(root[size]).toBeUndefined()
   await message.unmount()
 })
 

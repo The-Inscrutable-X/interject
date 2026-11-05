@@ -1418,11 +1418,9 @@ export const register: Register = on => {
         </Box>,
       )
     }
-    return (
-      <Box flexDirection="column" minWidth={0}>
-        {parts}
-      </Box>
-    )
+    // No minWidth here: the engine's own drawing of the first part is a child,
+    // and Desktop refuses an engine node under a Box with one.
+    return <Box flexDirection="column">{parts}</Box>
   })
 
   // The message a cut sends for the person: drawn as one short line.
