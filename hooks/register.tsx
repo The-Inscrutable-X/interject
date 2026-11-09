@@ -585,8 +585,19 @@ async function openForm($: EngineInterface, next: InterjectDraft, surface?: Rend
     return true
   }
   await update($, draft, (): InterjectDraft => ({ ...next, inline: undefined }))
-  await openPane($, 10)
+  await openPane($, formRows(next))
   return true
+}
+
+/**
+ * The panel's rows for the form: room for the quoted line (two lines at
+ * most, by an estimate, the panel's width unknown here) and, on a side answer or a
+ * follow-up, the line saying the earlier ones go with it, so the buttons stay
+ * in view.
+ */
+function formRows(d: InterjectDraft): number {
+  const quoteLines = Math.min(2, Math.max(1, Math.ceil(d.quote.length / 70)))
+  return 8 + quoteLines + (d.on !== undefined || d.parent !== undefined ? 1 : 0)
 }
 
 /**
@@ -1142,7 +1153,8 @@ function formTree($: EngineInterface, { Box, Text, Button, Input }: FormElements
       </Text>
     ) : (
       <Box borderStyle="quote" borderColor="warning">
-        <Text dimColor>{clip(current.quote, width * 3)}</Text>
+        {/* Two lines at most, so the buttons below stay in view in a short panel; the whole line is still sent. */}
+        <Text dimColor>{clip(current.quote, (width - 4) * 2)}</Text>
       </Box>
     ),
     current.on !== undefined && <Text dimColor>On a side answer: the earlier questions and answers go with it.</Text>,
