@@ -677,6 +677,30 @@ for (const surface of ['desktop', 'vscode'] as const) {
   })
 }
 
+test('✎ still has the selection when a check lands between the press that cleared it and the click', async ($, on) => {
+  const { world, clock } = engine(on, 'terminal')
+  await begin($, 'terminal')
+  world.selection = { text: LINE, requestId: 'm1' }
+  await clock.advance(500)
+  const band = await $.ui.mount(BAND('terminal'))
+  // The mouse press clears the selection; a check runs before the button does.
+  world.selection = undefined
+  await clock.advance(400)
+  await band.press({ key: 'interject-here' })
+  await band.unmount()
+  // The form for that line opens, not the list of lines.
+  const pane = await $.ui.mount(PANE('terminal'))
+  expect(await pane.find({ key: 'question' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /feeder/ })).toBeDefined()
+  await pane.unmount()
+
+  // A selection cleared for good is let go after about a second.
+  await clock.advance(1600)
+  const later = await $.ui.mount(BAND('terminal'))
+  expect(await later.find({ key: 'interject-here' })).toBeUndefined()
+  await later.unmount()
+})
+
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`quick answer: no agent, one request without tools, then ask again with tools (${surface})`, async ($, on) => {
     const { world } = engine(on, surface)

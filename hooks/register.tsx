@@ -1253,9 +1253,20 @@ export const register: Register = on => {
     }
 
     // Watch the mouse selection, so the band can offer "Interject here".
+    // A press on ✎ clears the selection a moment before the button runs, so a
+    // selection that goes empty is kept a little longer (three checks, about a
+    // second): a check landing between the press and the release would
+    // otherwise forget it, and ✎ would open the list of lines instead.
+    let emptyChecks = 0
     $.clock.every(400, async () => {
       const selection = await $.ui.selection()
       const text = selection?.text.trim() ?? ''
+      if (text === '') {
+        emptyChecks += 1
+        if (emptyChecks < 3) return
+      } else {
+        emptyChecks = 0
+      }
       const key = text === '' ? '' : (selection?.requestId ?? '') + '\n' + text
       if (key === shownSelection) return
       shownSelection = key
