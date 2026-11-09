@@ -404,40 +404,140 @@ async function newId($: EngineInterface): Promise<string> {
   return String(await $.clock.now()) + '-' + Math.random().toString(36).slice(2, 7)
 }
 
-/**
- * Changes the boxes, and saves them for this session so a resume brings them
- * back. Every session's boxes are kept until removed; only when the store is
- * full (4 MiB in all) are the oldest other sessions' boxes let go to make room.
- */
-async function setNotes($: EngineInterface, change: (list: InterjectNote[]) => InterjectNote[]): Promise<void> {
-  const list = await update($, notes, change)
-  const id = await $.session.id()
-  if (list.length === 0) {
-    await $.store.delete('notes:' + id)
-    return
+// ---------------------------------------------------------------------------
+// Saving: each session's boxes in a folder of their own, as pages of JSON.
+// Claude Code reads a file only up to 4 MiB, so a session's boxes are split
+// into pages under that; with no limit on pages or sessions. It has no way to
+// delete a file, so a page no longer needed is written empty ([]).
+
+const PAGE_BYTES = 3 * 1024 * 1024
+
+/** The folder that holds every session's boxes: INTERJECT_BOXES_DIR, or ~/.claude/interject-boxes. */
+async function boxesDir($: EngineInterface): Promise<string> {
+  const chosen = await $.env.get('INTERJECT_BOXES_DIR')
+  if (chosen !== undefined && chosen.trim() !== '') return chosen.replace(/\/+$/, '')
+  return ((await $.env.get('HOME')) ?? '') + '/.claude/interject-boxes'
+}
+
+/** `list` cut into pages of JSON text, each under PAGE_BYTES. */
+function pagesOf(list: InterjectNote[]): string[] {
+  const pages: string[] = []
+  let page: string[] = []
+  let size = 2
+  for (const n of list) {
+    const one = JSON.stringify(n)
+    if (page.length > 0 && size + one.length + 1 > PAGE_BYTES) {
+      pages.push('[' + page.join(',') + ']')
+      page = []
+      size = 2
+    }
+    page.push(one)
+    size += one.length + 1
   }
-  const index = await $.store.get('sessions')
-  const others = Array.isArray(index) ? index.filter((s): s is string => typeof s === 'string' && s !== id) : []
-  let dropped = 0
-  for (;;) {
+  if (page.length > 0 || pages.length === 0) pages.push('[' + page.join(',') + ']')
+  return pages
+}
+
+/** What each page file holds, as last written in this process, by path. */
+const written = new Map<string, string>()
+let saving: Promise<void> = Promise.resolve()
+
+/** A session's saved boxes, every page in order; empty when none are saved. */
+async function loadBoxes($: EngineInterface, id: string): Promise<InterjectNote[]> {
+  const folder = (await boxesDir($)) + '/' + id
+  if (!(await $.fs.exists(folder))) return []
+  const pages = (await $.fs.list(folder))
+    .map(f => /^(\d+)\.json$/.exec(f.name)?.[1])
+    .filter((k): k is string => k !== undefined)
+    .map(Number)
+    .sort((a, b) => a - b)
+  const all: InterjectNote[] = []
+  for (const k of pages) {
     try {
-      await $.store.set('notes:' + id, list.slice(-100))
-      break
+      const path = folder + '/' + k + '.json'
+      const text = String(await $.fs.read(path))
+      // Known as written, so a later save empties it when it is left over.
+      written.set(path, text)
+      const page = JSON.parse(text)
+      if (Array.isArray(page)) all.push(...(page as InterjectNote[]))
     } catch {
-      // Over the store's 4 MiB: make room from the oldest session.
-      const oldest = others.shift()
-      if (oldest === undefined) {
-        $.ui.toast("Interject could not save this session's boxes: its storage is full.")
-        return
-      }
-      await $.store.delete('notes:' + oldest)
-      dropped += 1
+      // A page cut short (the app quit while writing it): the rest still load.
     }
   }
-  if (dropped > 0) {
-    await $.store.set('sessions', [...others, id])
-    $.ui.toast('Interject storage was full: removed the boxes of the ' + dropped + ' oldest ' + (dropped === 1 ? 'session.' : 'sessions.'))
+  return all
+}
+
+/** Writes this session's boxes as they stand now: the pages that changed, and [] in pages left over. */
+function saveBoxes($: EngineInterface): Promise<void> {
+  saving = saving.then(async () => {
+    try {
+      const folder = (await boxesDir($)) + '/' + (await $.session.id())
+      const pages = pagesOf(await read($, notes))
+      const before = [...written.keys()].filter(k => k.startsWith(folder + '/')).length
+      for (let k = 0; k < Math.max(pages.length, before); k++) {
+        const path = folder + '/' + k + '.json'
+        const text = pages[k] ?? '[]'
+        if (written.get(path) === text) continue
+        await $.fs.write(path, text)
+        written.set(path, text)
+      }
+    } catch (err) {
+      $.ui.toast("Interject could not save this session's boxes: " + clip(String(err), 120))
+    }
+  })
+  return saving
+}
+
+/** Moves boxes the mod's store held (before the folder) into the folder, once. */
+async function moveFromStore($: EngineInterface): Promise<void> {
+  const keys = (await $.store.keys()).filter(k => k.startsWith('notes:'))
+  const dir = await boxesDir($)
+  for (const key of keys) {
+    const list = await $.store.get(key)
+    const folder = dir + '/' + key.slice('notes:'.length)
+    if (Array.isArray(list) && list.length > 0 && !(await $.fs.exists(folder))) {
+      const pages = pagesOf(list as InterjectNote[])
+      for (const [k, text] of pages.entries()) await $.fs.write(folder + '/' + k + '.json', text)
+    }
+    await $.store.delete(key)
   }
+  if ((await $.store.get('sessions')) !== undefined) await $.store.delete('sessions')
+}
+
+// The boxes are held in the mod's state to be drawn, and Claude Code caps a
+// state value at 4 MiB of JSON: about 2,000 boxes of a session. Past that the
+// session's oldest boxes are let go.
+const STATE_LIMIT = 4_000_000
+
+/** `list` with its oldest boxes (and the boxes inside them) dropped until it fits the state's cap. */
+function fitBoxes(list: InterjectNote[]): { list: InterjectNote[]; dropped: number } {
+  let kept = list
+  let size = JSON.stringify(kept).length
+  while (size > STATE_LIMIT && kept.length > 1) {
+    const oldest = kept[0]
+    if (oldest === undefined) break
+    const gone = boxesUnder(kept, oldest.id)
+    kept = kept.filter(m => !gone.has(m.id))
+    size = JSON.stringify(kept).length
+  }
+  return { list: kept, dropped: list.length - kept.length }
+}
+
+/** The notice when a session's oldest boxes were let go. */
+function fullNotice(dropped: number): string {
+  return 'Interject: this session holds the most boxes it can, so its ' + dropped + ' oldest ' + (dropped === 1 ? 'box was' : 'boxes were') + ' removed.'
+}
+
+/** Changes the boxes, and saves them for this session so a resume brings them back. */
+async function setNotes($: EngineInterface, change: (list: InterjectNote[]) => InterjectNote[]): Promise<void> {
+  let dropped = 0
+  await update($, notes, list => {
+    const fitted = fitBoxes(change(list))
+    dropped = fitted.dropped
+    return fitted.list
+  })
+  if (dropped > 0) $.ui.toast(fullNotice(dropped))
+  await saveBoxes($)
 }
 
 async function openPane($: EngineInterface, rows: number): Promise<void> {
@@ -1135,20 +1235,21 @@ export const register: Register = on => {
       immediate: true,
     })
 
-    // Bring back this session's boxes after a resume. The index lists, oldest
-    // first, the sessions that have boxes saved, this one last.
+    // Bring back this session's boxes after a resume, from their folder.
     const id = await $.session.id()
-    const index = await $.store.get('sessions')
-    const listed = Array.isArray(index) ? index.filter((s): s is string => typeof s === 'string' && s !== id) : []
-    const withBoxes: string[] = []
-    for (const s of listed) if (Array.isArray(await $.store.get('notes:' + s))) withBoxes.push(s)
-    await $.store.set('sessions', [...withBoxes, id])
-    const saved = await $.store.get('notes:' + id)
-    if (Array.isArray(saved) && saved.length > 0 && (await read($, notes)).length === 0) {
-      const restored = (saved as InterjectNote[]).map((n): InterjectNote =>
+    try {
+      await moveFromStore($)
+    } catch {
+      // The store's boxes stay where they are, to move next time.
+    }
+    const saved = await loadBoxes($, id).catch((): InterjectNote[] => [])
+    if (saved.length > 0 && (await read($, notes)).length === 0) {
+      const restored = saved.map((n): InterjectNote =>
         n.status === 'thinking' ? { ...n, status: 'failed', answer: 'Interrupted before it answered.' } : n,
       )
-      await update($, notes, () => restored)
+      const fitted = fitBoxes(restored)
+      await update($, notes, () => fitted.list)
+      if (fitted.dropped > 0) $.ui.toast(fullNotice(fitted.dropped))
     }
 
     // Watch the mouse selection, so the band can offer "Interject here".

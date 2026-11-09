@@ -77,6 +77,10 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal',
     childLines?: string[]
     /** Each process started, by its argv. */
     children: string[][]
+    /** The files the mod wrote, by absolute path. */
+    files: Map<string, string>
+    /** The notices the mod showed. */
+    toasts: string[]
   } = {
     answers: [],
     forkPrompts: [],
@@ -89,8 +93,25 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal',
     denySpawns: 0,
     spawnTries: 0,
     children: [],
+    files: new Map(),
+    toasts: [],
   }
   last = world
+  mock.env(on, { HOME: '/home/t' })
+  // The file system, in memory: what the mod's saving reads and writes.
+  on('fs.write', (_, e) => {
+    world.files.set(e.path, e.text)
+    return { value: undefined }
+  })
+  on('fs.read', (_, e) => {
+    const text = world.files.get(e.path)
+    return text === undefined ? ({ deny: 'ENOENT: ' + e.path } as never) : { value: text }
+  })
+  on('fs.exists', (_, e) => ({ value: [...world.files.keys()].some(f => f === e.path || f.startsWith(e.path + '/')) }))
+  on('fs.list', (_, e) => {
+    const names = new Set([...world.files.keys()].filter(f => f.startsWith(e.path + '/')).map(f => f.slice(e.path.length + 1).split('/')[0] ?? ''))
+    return { value: [...names].map(name => ({ name, kind: 'file', size: 0, mtimeMs: 0, isLink: false })) as never }
+  })
   const clock = mock.clock(on)
   if (store === undefined) mock.store(on)
   else {
@@ -119,7 +140,10 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal',
     return { value: undefined }
   })
   on('session.surfaces', () => ({ value: [surface] }))
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_, e) => {
+    world.toasts.push(JSON.stringify(e))
+    return { value: undefined }
+  })
   on('ui.selection', () => ({ value: world.selection }))
   on('session.id', () => ({ value: 's1' }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
@@ -367,34 +391,61 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
   })
 }
 
-test('boxes are saved for every session, with no cap on sessions; a full store lets the oldest go', async ($, on) => {
+test('boxes are saved in a folder per session, in pages, for every session; boxes in the store move there', async ($, on) => {
   const store = new Map<string, unknown>()
   const { world } = engine(on, 'terminal', store)
   world.selection = { text: LINE, requestId: 'm1' }
   on('prompt.submit', (_, e) => ({ text: e.text }))
-  const box = (s: string, answer = 'a') => [{ id: s, mode: 'side', status: 'answered', question: 'q', quote: LINE, answer }]
-  // Forty earlier sessions with boxes, the oldest big enough to nearly fill the store.
-  const old = Array.from({ length: 40 }, (_, i) => 'old' + i)
-  for (const s of old) store.set('notes:' + s, box(s))
-  store.set('notes:huge', box('huge', 'x'.repeat(4 * 1024 * 1024 - 20_000)))
-  store.set('sessions', ['huge', ...old, 'gone'])
+  const box = (s: string, answer = 'a') => ({ id: s, requestId: 'm1', mode: 'side', status: 'answered', question: 'q ' + s, quote: LINE, answer })
+  // What the store held before: this session's boxes and another's. This
+  // session's are 120 boxes of 30 KB: more than a page (3 MiB) holds.
+  const many = Array.from({ length: 120 }, (_, i) => box('b' + i, 'z'.repeat(30_000)))
+  store.set('notes:s1', [box('mine'), ...many])
+  store.set('notes:other', [box('theirs')])
+  store.set('sessions', ['other', 's1'])
+  const dir = '/home/t/.claude/interject-boxes'
 
   await begin($, 'terminal')
-  // Every session that has boxes stays listed; one with none saved is dropped.
-  expect(store.get('sessions')).toEqual(['huge', ...old, 's1'])
+  // Moved out of the store, into the folder, and brought back here.
+  expect([...store.keys()]).toEqual([])
+  expect(world.files.get(dir + '/other/0.json')).toContain('q theirs')
 
-  // This session's boxes do not fit beside the huge one: the oldest goes, the rest stay.
-  world.answers.push('y'.repeat(30_000))
+  // Two pages, every box kept, and a new box saved after them.
+  expect(world.files.has(dir + '/s1/1.json')).toBe(true)
+  world.answers.push('An answer.')
   await interject($, 'terminal', 'Which plate?', 'enter')
-  expect(store.has('notes:huge')).toBe(false)
-  expect(store.has('notes:old0')).toBe(true)
-  expect(store.has('notes:old39')).toBe(true)
-  expect(JSON.stringify(store.get('notes:s1'))).toContain('Which plate?')
-  expect(store.get('sessions')).toEqual([...old, 's1'])
+  const page0 = JSON.parse(world.files.get(dir + '/s1/0.json') ?? '[]') as unknown[]
+  const page1 = JSON.parse(world.files.get(dir + '/s1/1.json') ?? '[]') as unknown[]
+  // Brought back, then saved again with the new box: 121 restored and 1 new.
+  expect(page0.length + page1.length).toBe(122)
+  expect(world.files.get(dir + '/s1/0.json')).toContain('q mine')
+  expect((world.files.get(dir + '/s1/0.json') ?? '').length).toBeLessThan(3 * 1024 * 1024)
+  expect(world.files.get(dir + '/s1/1.json')).toContain('Which plate?')
 
-  // Clearing them leaves nothing saved for this session.
+  // Cleared: the pages are written empty (the file API cannot delete), and nothing comes back.
   await $.command.run({ command: 'interject', args: 'clear' })
-  expect(store.has('notes:s1')).toBe(false)
+  expect(world.files.get(dir + '/s1/0.json')).toBe('[]')
+  expect(world.files.get(dir + '/s1/1.json')).toBe('[]')
+})
+
+test('a session holds what the state can (4 MiB): past it the oldest boxes go, with a notice', async ($, on) => {
+  const { world } = engine(on, 'terminal')
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  const dir = '/home/t/.claude/interject-boxes'
+  const many = Array.from({ length: 140 }, (_, i) => ({ id: 'b' + i, requestId: 'm1', mode: 'side', status: 'answered', question: 'q b' + i, quote: LINE, answer: 'z'.repeat(30_000) }))
+  world.files.set(dir + '/s1/0.json', JSON.stringify(many.slice(0, 90)))
+  world.files.set(dir + '/s1/1.json', JSON.stringify(many.slice(90)))
+
+  await begin($, 'terminal')
+  world.answers.push('An answer.')
+  await interject($, 'terminal', 'Which plate?', 'enter')
+  const saved = [0, 1, 2].flatMap(k => JSON.parse(world.files.get(dir + '/s1/' + k + '.json') ?? '[]') as { id: string; question: string }[])
+  expect(saved.length).toBeLessThan(141)
+  expect(saved.some(n => n.id === 'b0')).toBe(false)
+  expect(saved.some(n => n.id === 'b139')).toBe(true)
+  expect(saved.at(-1)?.question).toBe('Which plate?')
+  expect(world.toasts.some(t => /oldest/.test(t))).toBe(true)
 })
 
 test('a reply with boxes fits its width: every Box says its direction, the boxes may shrink (desktop)', async ($, on) => {
