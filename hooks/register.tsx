@@ -471,8 +471,10 @@ async function loadBoxes($: EngineInterface, id: string): Promise<InterjectNote[
 function saveBoxes($: EngineInterface): Promise<void> {
   saving = saving.then(async () => {
     try {
-      const folder = (await boxesDir($)) + '/' + (await $.session.id())
-      const pages = pagesOf(await read($, notes))
+      const id = await $.session.id()
+      const folder = (await boxesDir($)) + '/' + id
+      const list = await read($, notes)
+      const pages = pagesOf(list)
       const before = [...written.keys()].filter(k => k.startsWith(folder + '/')).length
       for (let k = 0; k < Math.max(pages.length, before); k++) {
         const path = folder + '/' + k + '.json'
@@ -481,11 +483,76 @@ function saveBoxes($: EngineInterface): Promise<void> {
         await $.fs.write(path, text)
         written.set(path, text)
       }
+      await indexReplies($, id, list)
     } catch (err) {
       $.ui.toast("Interject could not save this session's boxes: " + clip(String(err), 120))
     }
   })
   return saving
+}
+
+// A session can go on under a new id: Desktop resumes one that way, and a fork
+// is one. Its replies keep their ids, so an index of which session holds the
+// boxes of each reply lets the new session take them over when it draws one.
+
+const INDEX = 'replies.json'
+/** Reply ids already in the index for this session, so a save adds only new ones. */
+const indexed = new Set<string>()
+/** Reply id to the session holding its boxes: read at start when this session has none of its own. */
+let carried: Map<string, string> | undefined
+/** The sessions whose boxes this one has taken over. */
+const adopted = new Set<string>()
+
+async function readIndex($: EngineInterface): Promise<Record<string, string> | undefined> {
+  const path = (await boxesDir($)) + '/' + INDEX
+  if (!(await $.fs.exists(path))) return undefined
+  try {
+    const value = JSON.parse(String(await $.fs.read(path)))
+    return value !== null && typeof value === 'object' ? (value as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** The index, built from every session's folder the first time there is none. */
+async function loadIndex($: EngineInterface): Promise<Record<string, string>> {
+  const found = await readIndex($)
+  if (found !== undefined) return found
+  const dir = await boxesDir($)
+  const index: Record<string, string> = {}
+  if (await $.fs.exists(dir)) {
+    const folders = (await $.fs.list(dir)).filter(f => f.kind === 'dir').sort((a, b) => a.mtimeMs - b.mtimeMs)
+    for (const f of folders) {
+      for (const n of await loadBoxes($, f.name).catch((): InterjectNote[] => [])) {
+        if (n.requestId !== undefined) index[n.requestId] = f.name
+      }
+    }
+  }
+  await $.fs.write(dir + '/' + INDEX, JSON.stringify(index))
+  return index
+}
+
+/** Records this session as holding the boxes of the replies in `list`. */
+async function indexReplies($: EngineInterface, id: string, list: InterjectNote[]): Promise<void> {
+  const fresh = [...new Set(list.map(n => n.requestId).filter((r): r is string => r !== undefined && !indexed.has(r)))]
+  if (fresh.length === 0) return
+  const index = (await readIndex($)) ?? {}
+  for (const r of fresh) index[r] = id
+  await $.fs.write((await boxesDir($)) + '/' + INDEX, JSON.stringify(index))
+  for (const r of fresh) indexed.add(r)
+}
+
+/** Takes over the boxes of session `from`, which this one continues. */
+async function adopt($: EngineInterface, from: string): Promise<void> {
+  const theirs = await loadBoxes($, from).catch((): InterjectNote[] => [])
+  if (theirs.length === 0) return
+  await setNotes($, list => {
+    const have = new Set(list.map(n => n.id))
+    const taken = theirs
+      .filter(n => !have.has(n.id))
+      .map((n): InterjectNote => (n.status === 'thinking' ? { ...n, status: 'failed', answer: 'Interrupted before it answered.' } : n))
+    return [...taken, ...list]
+  })
 }
 
 /** Moves boxes the mod's store held (before the folder) into the folder, once. */
@@ -1262,6 +1329,16 @@ export const register: Register = on => {
       const fitted = fitBoxes(restored)
       await update($, notes, () => fitted.list)
       if (fitted.dropped > 0) $.ui.toast(fullNotice(fitted.dropped))
+      for (const n of saved) if (n.requestId !== undefined) indexed.add(n.requestId)
+    } else if (saved.length === 0) {
+      // None of its own: it may go on from another session (a resume under a
+      // new id, a fork), whose boxes it takes over as it draws their replies.
+      try {
+        const index = await loadIndex($)
+        carried = new Map(Object.entries(index).filter(([, s]) => s !== id))
+      } catch {
+        carried = undefined
+      }
     }
 
     // Watch the mouse selection, so the band can offer "Interject here".
@@ -1406,6 +1483,11 @@ export const register: Register = on => {
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const text = e.props.text
     seen.set(e.requestId, text)
+    const holder = carried?.get(e.requestId)
+    if (holder !== undefined && !adopted.has(holder)) {
+      adopted.add(holder)
+      void adopt($, holder)
+    }
 
     const all = await read($, notes)
     const top = all.filter(

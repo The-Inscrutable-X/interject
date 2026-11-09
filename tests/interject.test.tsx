@@ -109,8 +109,10 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal',
   })
   on('fs.exists', (_, e) => ({ value: [...world.files.keys()].some(f => f === e.path || f.startsWith(e.path + '/')) }))
   on('fs.list', (_, e) => {
-    const names = new Set([...world.files.keys()].filter(f => f.startsWith(e.path + '/')).map(f => f.slice(e.path.length + 1).split('/')[0] ?? ''))
-    return { value: [...names].map(name => ({ name, kind: 'file', size: 0, mtimeMs: 0, isLink: false })) as never }
+    const rest = [...world.files.keys()].filter(f => f.startsWith(e.path + '/')).map(f => f.slice(e.path.length + 1))
+    const names = new Set(rest.map(r => r.split('/')[0] ?? ''))
+    const kind = (name: string) => (rest.some(r => r.startsWith(name + '/')) ? 'dir' : 'file')
+    return { value: [...names].map(name => ({ name, kind: kind(name), size: 0, mtimeMs: 0, isLink: false })) as never }
   })
   const clock = mock.clock(on)
   if (store === undefined) mock.store(on)
@@ -426,6 +428,25 @@ test('boxes are saved in a folder per session, in pages, for every session; boxe
   await $.command.run({ command: 'interject', args: 'clear' })
   expect(world.files.get(dir + '/s1/0.json')).toBe('[]')
   expect(world.files.get(dir + '/s1/1.json')).toBe('[]')
+})
+
+test('a session that goes on under a new id takes over the boxes of the one it continues', async ($, on) => {
+  const { world } = engine(on, 'terminal')
+  const dir = '/home/t/.claude/interject-boxes'
+  // The earlier session's boxes, at reply m1; no index yet, so it is built from the folders.
+  const box = { id: 'b1', requestId: 'm1', mode: 'side', status: 'answered', question: 'Which plate?', quote: LINE, answer: 'The round one.' }
+  world.files.set(dir + '/old/0.json', JSON.stringify([box]))
+  world.files.set(dir + '/other/0.json', JSON.stringify([{ ...box, id: 'b2', requestId: 'zzz', question: 'Elsewhere?' }]))
+
+  await begin($, 'terminal')
+  const message = await $.ui.mount(MESSAGE('terminal'))
+  await message.redraw()
+  expect(await message.find({ type: 'Text', text: /Which plate\?/ })).toBeDefined()
+  expect(await message.find({ type: 'Text', text: /Elsewhere\?/ })).toBeUndefined()
+  await message.unmount()
+  // Saved as this session's own, and the index now names this session for m1.
+  expect(world.files.get(dir + '/s1/0.json')).toContain('Which plate?')
+  expect(JSON.parse(world.files.get(dir + '/replies.json') ?? '{}')).toEqual({ m1: 's1', zzz: 'other' })
 })
 
 test('a session holds what the state can (4 MiB): past it the oldest boxes go, with a notice', async ($, on) => {

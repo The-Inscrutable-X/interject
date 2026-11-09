@@ -83,7 +83,10 @@ line of the latest reply; `/interject followup`, `/interject keep` and
 every box.
 
 Boxes are saved per session: resuming a session (`claude --resume`) brings
-them back. Each session's boxes are a folder of their own in
+them back. A session that goes on under a new id (Desktop resumes some that
+way, and a fork is one) takes over the boxes of the one it continues as it
+draws their replies: `replies.json` in the folder below records which
+session holds the boxes of each reply. Each session's boxes are a folder of their own in
 `~/.claude/interject-boxes/<session id>/` (set `INTERJECT_BOXES_DIR` to put
 them somewhere else), as JSON page files of up to 3 MiB each. Every
 session's are kept, with no limit on sessions, until you remove them:
