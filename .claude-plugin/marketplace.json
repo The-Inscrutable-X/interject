@@ -1,0 +1,14 @@
+{
+  "name": "interject",
+  "description": "The interject mod for Claude Code",
+  "owner": {
+    "name": "Hanqi Xiao"
+  },
+  "plugins": [
+    {
+      "name": "interject",
+      "source": "./",
+      "description": "Interject at a line of Claude's reply: ask a side question answered at that line, or attach a note to your next message"
+    }
+  ]
+}

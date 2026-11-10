@@ -97,14 +97,36 @@ One session holds as many boxes as fit in the mod's state, which Claude
 Code caps at 4 MiB: about 2,000 boxes. Past that, that session's oldest
 boxes are removed, and a notice says so.
 
-## Setup
+## Install
 
-The mod is listed in `~/.claude/settings.json` under `env`, as
-`CLAUDE_CODE_PLUGIN_DIRS` (this folder) and
-`CLAUDE_CODE_PLUGIN_DIR_WATCH` (`1`: reload it when its files change). So
-every Claude Code session started from now on loads it, in the terminal
-and in the Desktop app's Code tab. Sessions already running don't. To turn
-it off, delete those two lines.
+In Claude Code (2.1.275 or later), type:
+
+```
+/plugin install interject --marketplace The-Inscrutable-X/interject
+```
+
+Or from a shell:
+
+```bash
+claude plugin marketplace add The-Inscrutable-X/interject
+claude plugin install interject@interject
+```
+
+Sessions started after that load it, in the terminal and in the Desktop
+app's Code tab. To update: `claude plugin marketplace update interject`.
+To remove: `claude plugin uninstall interject@interject`.
+
+While the repository is private, you need to have been invited to it, and
+git on your machine must be able to reach it (`gh auth login`, or an SSH
+key on your GitHub account).
+
+### Working on the mod
+
+Clone this repository and point Claude Code at the folder instead: in
+`~/.claude/settings.json`, under `env`, set `CLAUDE_CODE_PLUGIN_DIRS` to
+the folder and `CLAUDE_CODE_PLUGIN_DIR_WATCH` to `1` (reload it when its
+files change). Don't also install it from the marketplace, or it runs
+twice. Run the tests with `claude plugin test .` in the folder.
 
 For mouse selection in the terminal, fullscreen rendering must be on: type
 `/tui` to check and `/tui fullscreen` to switch. In iTerm2, mouse reporting
@@ -153,7 +175,13 @@ conversation would get is dropped, so the main thread never hears of it.
 ## Files
 
 - `.claude-plugin/plugin.json`: the mod's name and description
+- `.claude-plugin/marketplace.json`: lets Claude Code install the mod from this repository
 - `hooks/hooks.json`: points Claude Code at the code file
 - `hooks/register.tsx`: all of the mod's code
 - `types/index.d.ts`: the shape of the values the mod keeps (the boxes, the draft being typed, the current selection)
 - `tests/interject.test.tsx`: automated tests (`claude plugin test .` in this folder)
+- `demo/`: the scripts that recorded `demo/interject-demo.mp4`
+
+## License
+
+MIT. See `LICENSE`.

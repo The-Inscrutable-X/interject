@@ -3,3 +3,5 @@
 # Local Claude Code settings for this folder.
 .claude/settings.local.json
 .DS_Store
+# A local experiment, not part of the mod.
+codex-client/

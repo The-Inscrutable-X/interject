@@ -2,5 +2,11 @@
   "name": "interject",
   "version": "0.1.0",
   "description": "Interject at a line of Claude's reply: ask a side question answered at that line, or attach a note to your next message",
+  "author": {
+    "name": "Hanqi Xiao",
+    "url": "https://github.com/The-Inscrutable-X"
+  },
+  "repository": "https://github.com/The-Inscrutable-X/interject",
+  "license": "MIT",
   "types": "./types/index.d.ts"
 }
