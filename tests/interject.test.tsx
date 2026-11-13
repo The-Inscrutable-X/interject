@@ -81,6 +81,8 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal',
     files: Map<string, string>
     /** The notices the mod showed. */
     toasts: string[]
+    /** The session's id: changed by a test, as a resume or /clear inside the process changes it. */
+    sessionId: string
   } = {
     answers: [],
     forkPrompts: [],
@@ -95,6 +97,7 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal',
     children: [],
     files: new Map(),
     toasts: [],
+    sessionId: 's1',
   }
   last = world
   mock.env(on, { HOME: '/home/t' })
@@ -147,7 +150,7 @@ function engine(on: On, surface: 'terminal' | 'desktop' | 'vscode' = 'terminal',
     return { value: undefined }
   })
   on('ui.selection', () => ({ value: world.selection }))
-  on('session.id', () => ({ value: 's1' }))
+  on('session.id', () => ({ value: world.sessionId }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.messages', () => ({ value: [{ role: 'assistant', text: REPLY, toolUses: [] }] }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -447,6 +450,67 @@ test('a session that goes on under a new id takes over the boxes of the one it c
   // Saved as this session's own, and the index now names this session for m1.
   expect(world.files.get(dir + '/s1/0.json')).toContain('Which plate?')
   expect(JSON.parse(world.files.get(dir + '/replies.json') ?? '{}')).toEqual({ m1: 's1', zzz: 'other' })
+})
+
+test('a resume or /clear inside the process: the boxes of the conversation now shown, each saved to its own', async ($, on) => {
+  const { world, clock } = engine(on, 'terminal')
+  const dir = '/home/t/.claude/interject-boxes'
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'terminal')
+  world.answers.push('The round one.')
+  await interject($, 'terminal', 'Which plate?', 'enter')
+  const theirs = { id: 'b9', requestId: 'm1', mode: 'side', status: 'answered', question: 'From two?', quote: LINE, answer: 'Yes.' }
+  world.files.set(dir + '/s2/0.json', JSON.stringify([theirs]))
+
+  // Resumed into s2 with no session.start. Until the clock notices, s1's box is not drawn in it.
+  world.sessionId = 's2'
+  const message = await $.ui.mount(MESSAGE('terminal'))
+  expect(await message.find({ type: 'Text', text: /Which plate\?/ })).toBeUndefined()
+  // Then s2's box is shown, s1's is not: in the row already drawn, with no redraw asked for.
+  await clock.advance(400)
+  expect(await message.find({ type: 'Text', text: /From two\?/ })).toBeDefined()
+  expect(await message.find({ type: 'Text', text: /Which plate\?/ })).toBeUndefined()
+  await message.unmount()
+
+  // A box made now is s2's, and s1's saved boxes are left as they were.
+  world.answers.push('Under the tank.')
+  await interject($, 'terminal', 'Where is it?', 'enter')
+  expect(world.files.get(dir + '/s2/0.json')).toContain('Where is it?')
+  expect(world.files.get(dir + '/s1/0.json')).toContain('Which plate?')
+  expect(world.files.get(dir + '/s1/0.json')).not.toContain('Where is it?')
+
+  // Back to s1: its box again.
+  world.sessionId = 's1'
+  await clock.advance(400)
+  const again = await $.ui.mount(MESSAGE('terminal'))
+  await again.redraw()
+  expect(await again.find({ type: 'Text', text: /Which plate\?/ })).toBeDefined()
+  expect(await again.find({ type: 'Text', text: /From two\?/ })).toBeUndefined()
+  await again.unmount()
+})
+
+test('a whole paragraph with a link, selected as drawn, finds its line in the source', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  const dir = '/home/t/.claude/interject-boxes'
+  const PARA = 'In [register.tsx:297](hooks/register.tsx:297), the text sent along holds your question and the answer, as `keptContext` writes it.'
+  const TEXT = ['The short version: yes.', '', PARA, '', 'That is all there is to it.'].join('\n')
+  const ROW = { plugin: 'interject', surface: 'desktop', component: 'AssistantMessage', requestId: 'p1', props: { text: TEXT, isFirstOfReply: true } } as const
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'desktop')
+  const seen = await $.ui.mount(ROW)
+  await seen.unmount()
+
+  // As a desktop copies it: the link's words alone, and across rows (no row id).
+  world.selection = { text: 'In register.tsx:297, the text sent along holds your question and the answer, as keptContext writes it.\n' }
+  await $.command.run({ command: 'interject', args: '' })
+  const form = await $.ui.mount(ROW)
+  await form.input({ key: 'question', text: 'Which part?', kind: 'submit' })
+  await form.unmount()
+  await finish($)
+  const saved = JSON.parse(world.files.get(dir + '/s1/0.json') ?? '[]') as { quote: string; requestId: string }[]
+  expect(saved[0]?.quote).toBe(PARA)
+  expect(saved[0]?.requestId).toBe('p1')
 })
 
 test('a session holds what the state can (4 MiB): past it the oldest boxes go, with a notice', async ($, on) => {

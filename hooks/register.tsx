@@ -103,6 +103,10 @@ function splitUnits(text: string): string[] {
 function normalize(s: string): string {
   return s
     .normalize('NFKC')
+    // A link is drawn as its words alone, an escaped mark as the mark.
+    .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')
+    .replace(/<((?:https?|mailto):[^>\s]+)>/g, '$1')
+    .replace(/\\([\\`*_{}[\]()#+\-.!|>~])/g, '$1')
     .replace(/['"‘’‚‛“”„‟′″]/g, '')
     .replace(/[‐‑‒–—―]/g, '-')
     .replace(/-{2,}/g, '-')
@@ -114,8 +118,13 @@ function normalize(s: string): string {
     .toLowerCase()
 }
 
-/** The index of the unit a selection starts in, or -1 when none matches. */
-function findUnit(units: string[], selected: string): number {
+/**
+ * The index of the unit a selection starts in, or -1 when none matches.
+ * `loose`: when no unit holds the selection's start as it is, the unit that
+ * holds most of its words in order, for a line drawn unlike its source in
+ * places (a formula, an odd mark).
+ */
+function findUnit(units: string[], selected: string, loose = true): number {
   const first = selected
     .split('\n')
     .map(normalize)
@@ -125,7 +134,30 @@ function findUnit(units: string[], selected: string): number {
   const norms = units.map(normalize)
   const inside = norms.findIndex(unit => unit.includes(probe))
   if (inside >= 0) return inside
-  return norms.findIndex(unit => unit.length >= 8 && probe.includes(unit))
+  const within = norms.findIndex(unit => unit.length >= 8 && probe.includes(unit))
+  if (within >= 0 || !loose) return within
+  return closestUnit(norms, first)
+}
+
+/**
+ * The unit holding the most runs of four words of `line` (its first forty
+ * words); -1 unless one holds at least two runs, or half of a short line's.
+ */
+function closestUnit(norms: string[], line: string): number {
+  const words = line.split(' ').slice(0, 40)
+  const runs: string[] = []
+  for (let i = 0; i + 4 <= words.length; i++) runs.push(words.slice(i, i + 4).join(' '))
+  if (runs.length === 0) return -1
+  let best = -1
+  let most = 0
+  norms.forEach((unit, k) => {
+    const count = runs.filter(r => unit.includes(r)).length
+    if (count > most) {
+      best = k
+      most = count
+    }
+  })
+  return most >= Math.min(2, Math.ceil(runs.length / 2)) ? best : -1
 }
 
 /** Where unit `idx` ends in `text`, as an offset. */
@@ -357,12 +389,16 @@ function draftFor(list: InterjectNote[], selection: InterjectPicked, latest: str
   let requestId = selection.requestId
   let main = fromRow
   if (main === undefined) {
-    for (const [id, text] of seen) {
-      if (findUnit(splitUnits(text), selection.text) >= 0) {
-        requestId = id
-        main = text
-        break
+    // The row that holds the line as it is, before one that holds most of it.
+    for (const loose of [false, true]) {
+      for (const [id, text] of seen) {
+        if (findUnit(splitUnits(text), selection.text, loose) >= 0) {
+          requestId = id
+          main = text
+          break
+        }
       }
+      if (main !== undefined) break
     }
   }
 
@@ -467,13 +503,16 @@ async function loadBoxes($: EngineInterface, id: string): Promise<InterjectNote[
   return all
 }
 
-/** Writes this session's boxes as they stand now: the pages that changed, and [] in pages left over. */
-function saveBoxes($: EngineInterface): Promise<void> {
+/**
+ * Writes boxes `list` for session `id`: the pages that changed, and [] in
+ * pages left over. Both are taken when the change is made, so a save that
+ * runs after the conversation has switched still goes to the session it
+ * belongs to.
+ */
+function saveBoxes($: EngineInterface, id: string, list: InterjectNote[]): Promise<void> {
   saving = saving.then(async () => {
     try {
-      const id = await $.session.id()
       const folder = (await boxesDir($)) + '/' + id
-      const list = await read($, notes)
       const pages = pagesOf(list)
       const before = [...written.keys()].filter(k => k.startsWith(folder + '/')).length
       for (let k = 0; k < Math.max(pages.length, before); k++) {
@@ -597,14 +636,92 @@ function fullNotice(dropped: number): string {
 
 /** Changes the boxes, and saves them for this session so a resume brings them back. */
 async function setNotes($: EngineInterface, change: (list: InterjectNote[]) => InterjectNote[]): Promise<void> {
+  await followSession($)
   let dropped = 0
+  let changed: InterjectNote[] = []
   await update($, notes, list => {
     const fitted = fitBoxes(change(list))
     dropped = fitted.dropped
+    changed = fitted.list
     return fitted.list
   })
   if (dropped > 0) $.ui.toast(fullNotice(dropped))
-  await saveBoxes($)
+  await saveBoxes($, current ?? (await $.session.id()), changed)
+}
+
+// A resume (Desktop's reload, /resume) or a /clear inside a running session
+// moves it to another conversation under another id, and no session.start
+// fires for that. So the mod checks the id as it goes, and on a change holds
+// the boxes of the conversation now shown.
+
+/** The session whose boxes the mod holds now. */
+let current: string | undefined
+let switching: Promise<void> = Promise.resolve()
+
+/**
+ * Takes the boxes of session `id` in: its own, or, with none, the index to
+ * take over another session's as their replies are drawn. `replace`: what the
+ * state holds goes, as it belongs to another conversation.
+ */
+async function loadSession($: EngineInterface, id: string, replace: boolean): Promise<void> {
+  indexed.clear()
+  adopted.clear()
+  carried = undefined
+  const saved = await loadBoxes($, id).catch((): InterjectNote[] => [])
+  if (saved.length > 0) {
+    if (replace || (await read($, notes)).length === 0) {
+      const restored = saved.map((n): InterjectNote =>
+        n.status === 'thinking' ? { ...n, status: 'failed', answer: 'Interrupted before it answered.' } : n,
+      )
+      const fitted = fitBoxes(restored)
+      await update($, notes, () => fitted.list)
+      if (fitted.dropped > 0) $.ui.toast(fullNotice(fitted.dropped))
+    }
+    for (const n of saved) if (n.requestId !== undefined) indexed.add(n.requestId)
+    return
+  }
+  if (replace) await update($, notes, () => [])
+  // None of its own: it may go on from another session (a resume under a
+  // new id, a fork), whose boxes it takes over as it draws their replies.
+  try {
+    const index = await loadIndex($)
+    carried = new Map(Object.entries(index).filter(([, s]) => s !== id))
+  } catch {
+    carried = undefined
+  }
+}
+
+/**
+ * Notices a switch to another conversation, and holds that one's boxes.
+ * It writes state, so it runs from the clock and from changes, never while
+ * a reply is being drawn (drawing only reads).
+ */
+function followSession($: EngineInterface): Promise<void> {
+  switching = switching
+    .then(async () => {
+      const id = await $.session.id()
+      if (current === undefined) current = id
+      if (id === current) return
+      // Saves already made finish into the session they belong to.
+      await saving
+      // Set before the boxes are, so the redraw their change brings draws
+      // them; put back if the load fails, to be tried again on the next tick.
+      const before = current
+      current = id
+      try {
+        pendingCut = undefined
+        typed = ''
+        await update($, draft, () => null)
+        await loadSession($, id, true)
+      } catch (err) {
+        current = before
+        throw err
+      }
+    })
+    .catch(() => {
+      // Tried again on the next tick.
+    })
+  return switching
 }
 
 async function openPane($: EngineInterface, rows: number): Promise<void> {
@@ -623,9 +740,12 @@ async function drawsInline($: EngineInterface, surface: RenderSurface | undefine
 
 /** The reply row a line lies in, by the rows drawn so far: the latest that holds it. */
 function rowOf(quote: string): string | undefined {
-  let found: string | undefined
-  for (const [id, text] of seen) if (findUnit(splitUnits(text), quote) >= 0) found = id
-  return found
+  for (const loose of [false, true]) {
+    let found: string | undefined
+    for (const [id, text] of seen) if (findUnit(splitUnits(text), quote, loose) >= 0) found = id
+    if (found !== undefined) return found
+  }
+  return undefined
 }
 
 /** The row a reply ends in, by the rows drawn so far. */
@@ -1321,25 +1441,8 @@ export const register: Register = on => {
     } catch {
       // The store's boxes stay where they are, to move next time.
     }
-    const saved = await loadBoxes($, id).catch((): InterjectNote[] => [])
-    if (saved.length > 0 && (await read($, notes)).length === 0) {
-      const restored = saved.map((n): InterjectNote =>
-        n.status === 'thinking' ? { ...n, status: 'failed', answer: 'Interrupted before it answered.' } : n,
-      )
-      const fitted = fitBoxes(restored)
-      await update($, notes, () => fitted.list)
-      if (fitted.dropped > 0) $.ui.toast(fullNotice(fitted.dropped))
-      for (const n of saved) if (n.requestId !== undefined) indexed.add(n.requestId)
-    } else if (saved.length === 0) {
-      // None of its own: it may go on from another session (a resume under a
-      // new id, a fork), whose boxes it takes over as it draws their replies.
-      try {
-        const index = await loadIndex($)
-        carried = new Map(Object.entries(index).filter(([, s]) => s !== id))
-      } catch {
-        carried = undefined
-      }
-    }
+    current = id
+    await loadSession($, id, false)
 
     // Watch the mouse selection, so the band can offer "Interject here".
     // A press on ✎ clears the selection a moment before the button runs, so a
@@ -1348,6 +1451,7 @@ export const register: Register = on => {
     // otherwise forget it, and ✎ would open the list of lines instead.
     let emptyChecks = 0
     $.clock.every(400, async () => {
+      await followSession($)
       const selection = await $.ui.selection()
       const text = selection?.text.trim() ?? ''
       if (text === '') {
@@ -1483,13 +1587,18 @@ export const register: Register = on => {
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const text = e.props.text
     seen.set(e.requestId, text)
+    // Read first, so a change to the boxes draws this row again, even one
+    // drawn before they were loaded.
+    const all = await read($, notes)
+    // Moved to another conversation and its boxes not yet taken in (the clock
+    // does that within half a second): the boxes held belong to the last one.
+    if (current !== undefined && (await $.session.id()) !== current) return next(e)
     const holder = carried?.get(e.requestId)
     if (holder !== undefined && !adopted.has(holder)) {
       adopted.add(holder)
       void adopt($, holder)
     }
 
-    const all = await read($, notes)
     const top = all.filter(
       n => n.on === undefined && (n.requestId !== undefined ? n.requestId === e.requestId : text.includes(n.quote)),
     )

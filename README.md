@@ -83,7 +83,9 @@ line of the latest reply; `/interject followup`, `/interject keep` and
 every box.
 
 Boxes are saved per session: resuming a session (`claude --resume`) brings
-them back. A session that goes on under a new id (Desktop resumes some that
+them back. So does switching conversations inside a running session
+(`/resume`, `/clear`): within half a second, the mod
+shows the boxes of the conversation now on screen. A session that goes on under a new id (Desktop resumes some that
 way, and a fork is one) takes over the boxes of the one it continues as it
 draws their replies: `replies.json` in the folder below records which
 session holds the boxes of each reply. Each session's boxes are a folder of their own in
@@ -164,9 +166,12 @@ conversation would get is dropped, so the main thread never hears of it.
   closest.
 - **Typing `/interject` scrolls to the bottom**, because typing in the
   prompt box does that in Claude Code. The ✎ button avoids it.
-- **Matching a selection to its line** uses a simple text comparison. Lines
-  with links or unusual formatting may not match; the panel then offers the
-  list of lines instead.
+- **Matching a selection to its line** compares the text you selected with
+  the reply's markdown source, ignoring formatting marks and the web
+  addresses of links. When the start of the selection still doesn't match
+  (unusual formatting, a formula), the line that holds the most of its
+  words in order is taken. If nothing matches, the form opens at the end of
+  the reply.
 - **The ✎ button** shows in the terminal and the Desktop app, not in VS
   Code (Claude Code has no space above the prompt there); use `/interject`.
 - **The buttons inside a box** (follow up, keep, dismiss) need a mouse:
