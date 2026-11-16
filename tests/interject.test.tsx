@@ -359,6 +359,46 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     await message.unmount()
   })
 
+  test(`keep: the boxes a kept box builds on say they go too, and each is sent once (${surface})`, async ($, on) => {
+    const { world } = engine(on, surface)
+    world.selection = { text: LINE, requestId: 'm1' }
+    world.answers.push('Use the round plate.\n\nIt sits under the tank.', 'The tank.\n\nIt holds 40 litres.', 'Water.')
+    let sentContext: readonly string[] = []
+    on('prompt.submit', (_, e) => {
+      sentContext = e.context ?? []
+      return { text: e.text }
+    })
+    await begin($, surface)
+    await interject($, surface, 'Which plate?', 'enter')
+    const first = await $.ui.mount(MESSAGE(surface))
+    await first.unmount()
+    world.selection = { text: 'It sits under the tank.', requestId: 'm1' }
+    await interject($, surface, 'Which tank?', 'enter')
+    const second = await $.ui.mount(MESSAGE(surface))
+    await second.unmount()
+    world.selection = { text: 'It holds 40 litres.', requestId: 'm1' }
+    await interject($, surface, 'Of what?', 'enter')
+
+    const message = await $.ui.mount(MESSAGE(surface))
+    const keeps = async () => (await message.findAll({ type: 'Button' })).map(b => b.key ?? '').filter(k => k.startsWith('keep-'))
+    expect((await keeps()).length).toBe(3)
+    // Keep the outermost first, then the innermost: the middle one goes along.
+    await message.press({ key: (await keeps()).at(-1) ?? '' })
+    await message.press({ key: (await keeps())[0] ?? '' })
+    expect(await keeps()).toEqual([])
+    expect((await message.findAll({ type: 'Text', text: /^Kept: goes with/ })).length).toBe(2)
+    expect((await message.findAll({ type: 'Text', text: /^Kept with a question built on it: goes with/ })).length).toBe(1)
+
+    await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+    const sent = sentContext.join('\n')
+    for (const asked of ['Which plate?', 'Which tank?', 'Of what?']) {
+      expect(sent.split('The user asked: ' + asked).length - 1).toBe(1)
+    }
+    await message.redraw()
+    expect((await message.findAll({ type: 'Text', text: /^Kept with a question built on it: attached/ })).length).toBe(1)
+    await message.unmount()
+  })
+
   test(`dismiss: a box kept deep inside a dismissed box is not sent (${surface})`, async ($, on) => {
     const { world } = engine(on, surface)
     world.selection = { text: LINE, requestId: 'm1' }

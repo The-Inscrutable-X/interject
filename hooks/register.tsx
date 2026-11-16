@@ -326,11 +326,41 @@ function queueContext(list: InterjectNote[], n: InterjectNote): string {
   ].join('\n')
 }
 
-function keptContext(list: InterjectNote[], n: InterjectNote): string {
+/**
+ * What the kept boxes `kept` send, as one text: each kept box with the boxes
+ * it builds on, each box once, however many of its thread were kept.
+ */
+function keptContext(list: InterjectNote[], kept: InterjectNote[]): string {
+  const included = new Set<string>()
+  const exchanges: InterjectNote[] = []
+  for (const n of kept) {
+    for (const m of chainOf(list, n.id)) {
+      if (included.has(m.id)) continue
+      included.add(m.id)
+      exchanges.push(m)
+    }
+  }
+  const lines = chainText(exchanges)
+  lines[0] = 'The exchanges they kept, each after the ones it builds on:'
   return [
-    'While reading your earlier reply, the user asked side questions. They chose to keep this exchange: take it into account.',
-    ...chainText(chainOf(list, n.id)),
+    'While reading your earlier reply, the user asked side questions. They chose to keep these exchanges: take them into account.',
+    ...lines,
   ].join('\n')
+}
+
+/**
+ * The boxes a kept box brings along (those it sits in or follows up on), by
+ * id, with how far that keep has gone: queued, or sent with a message.
+ */
+function keptAlong(list: InterjectNote[]): Map<string, 'queued' | 'sent'> {
+  const along = new Map<string, 'queued' | 'sent'>()
+  for (const n of list) {
+    if (n.keep === undefined) continue
+    for (const m of chainOf(list, n.id).slice(0, -1)) {
+      if (along.get(m.id) !== 'queued') along.set(m.id, n.keep)
+    }
+  }
+  return along
 }
 
 /** What Claude reads to cut its reply at a line and continue from the interjection. */
@@ -1624,6 +1654,9 @@ export const register: Register = on => {
       return <Text dimColor>{'✂ The rest of this ' + what + ' (' + lines + (lines === 1 ? ' line' : ' lines') + ') was cut.'}</Text>
     }
 
+    // Boxes that go along with a kept box built on them say so, and offer no keep of their own.
+    const along = keptAlong(all)
+
     // One box, with the boxes interjected on its answer drawn inside it.
     const drawNote = (n: InterjectNote, depth: number): { box: RenderElement; isCut: boolean } => {
       let isCut = n.mode === 'cut'
@@ -1665,6 +1698,12 @@ export const register: Register = on => {
           {n.status === 'waiting' && <Text dimColor>Cut here. Press Enter to send your interjection and continue.</Text>}
           {n.keep === 'queued' && <Text dimColor>Kept: goes with your next message.</Text>}
           {n.keep === 'sent' && <Text dimColor>Kept: attached to your message.</Text>}
+          {n.keep === undefined && along.get(n.id) === 'queued' && (
+            <Text dimColor>Kept with a question built on it: goes with your next message.</Text>
+          )}
+          {n.keep === undefined && along.get(n.id) === 'sent' && (
+            <Text dimColor>Kept with a question built on it: attached to your message.</Text>
+          )}
           {n.status === 'answered' && (n.steps ?? []).length > 0 && (
             <Text dimColor>{'Used tools: ' + (n.steps ?? []).map(step => step.split(' ')[0]).join(', ')}</Text>
           )}
@@ -1674,7 +1713,7 @@ export const register: Register = on => {
             {n.mode === 'side' && n.status === 'answered' && (
               <Button key={'follow-' + n.id} plain dimColor label="follow up" onPress={press => followUp($, n, text, press.surface)} />
             )}
-            {n.mode === 'side' && n.status === 'answered' && n.keep === undefined && (
+            {n.mode === 'side' && n.status === 'answered' && n.keep === undefined && !along.has(n.id) && (
               <Button key={'keep-' + n.id} plain dimColor label="keep" onPress={() => keep($, n.id)} />
             )}
             {n.mode === 'side' && n.status === 'answered' && n.noTools !== undefined && n.forked === undefined && (
@@ -1806,7 +1845,7 @@ export const register: Register = on => {
       ...(e.context ?? []),
       ...waiting.map(n => n.pending ?? ''),
       ...queued.map(n => queueContext(list, n)),
-      ...kept.map(n => keptContext(list, n)),
+      ...(kept.length > 0 ? [keptContext(list, kept)] : []),
     ].filter(c => c !== '')
     const result = await next({ ...e, context })
     if (result.drop === undefined) {

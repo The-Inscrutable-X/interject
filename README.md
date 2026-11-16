@@ -61,7 +61,11 @@ each side answer there are also:
   ones as context;
 - **ask again with tools** (on a quick answer): the same question, now by a
   side chat that can use tools;
-- **keep**: the question and answer go with your next message;
+- **keep**: the question and answer go with your next message. So do the
+  boxes it builds on: the box it sits inside, the one that box sits inside,
+  and so on up, and any earlier question it follows up on. Each of those says
+  "Kept with a question built on it" and loses its own keep button. Each box
+  is sent once, however many boxes of one thread you keep;
 - **fork to session** (Desktop): the side chat goes on as a session of its
   own, forked from the conversation, named "Side chat: …". The mod asks
   Desktop for a **New task** card at the end of the conversation; press
