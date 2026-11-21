@@ -4,10 +4,9 @@ A Claude Code mod (an add-on that changes Claude Code's own screen) for
 when you get lost partway through a long reply. Stop at any line, even
 while Claude is still writing, and interject right there.
 
-[![A 3-minute narrated demo of Interject in Claude Code Desktop. Click to open the video.](demo/interject-desktop-demo-poster.jpg)](demo/interject-desktop-demo.mp4)
+https://github.com/user-attachments/assets/b21f3111-a49e-40c1-90b6-1973be21706e
 
-*A 3-minute narrated demo in Claude Code Desktop. Click the picture to open
-the video. Waits are cut or sped up.*
+*A 3-minute narrated demo in Claude Code Desktop. Waits are cut or sped up.*
 
 ## What it looks like
 
@@ -17,20 +16,24 @@ the video. Waits are cut or sped up.*
 <td><img src="demo/stills/02-interject-form.png" alt="The form that opens under the line"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/04-ask-on-the-side-and-follow-up.png" alt="A side answer and a follow-up under it"></td>
-<td><img src="demo/stills/05-nested-interjection.png" alt="A question asked inside a side answer"></td>
+<td><img src="demo/stills/03-quick-answer.png" alt="A quick answer in a box under the line"></td>
+<td><img src="demo/stills/04-ask-on-the-side.png" alt="A side answer at the line"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/06-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
-<td><img src="demo/stills/09-see-what-goes-with-next-message.png" alt="The exact text that goes with the next message"></td>
+<td><img src="demo/stills/05-follow-up.png" alt="A follow-up under the box that it follows"></td>
+<td><img src="demo/stills/06-nested-interjection.png" alt="A question asked inside a side answer"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/07-cut-here-and-continue.png" alt="Cut here and continue"></td>
-<td><img src="demo/stills/11-fork-to-session.png" alt="Fork a side chat into its own session"></td>
+<td><img src="demo/stills/07-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
+<td><img src="demo/stills/10-see-what-goes-with-next-message.png" alt="The exact text that goes with the next message"></td>
+</tr>
+<tr>
+<td><img src="demo/stills/08-cut-here-and-continue.png" alt="Cut here and continue"></td>
+<td><img src="demo/stills/12-fork-to-session.png" alt="Fork a side chat into its own session"></td>
 </tr>
 </table>
 
-All 12 pictures are in [`demo/stills/`](demo/stills/).
+Each picture shows what you click, then what you get. All 13 are in [`demo/stills/`](demo/stills/).
 
 ## How to use it
 
@@ -73,8 +76,7 @@ All 12 pictures are in [`demo/stills/`](demo/stills/).
      next send a message, the quoted line and your note are added under it.
      The box then says "Attached".
    - **Cut here and continue**: everything in the reply after your line is
-     withdrawn. If Claude is still writing, it is stopped. Your interjection
-     is sent for you, and Claude answers it and continues the reply from
+     withdrawn. Your interjection is sent for you, and Claude answers it and continues the reply from
      that line. The rest of the old reply is hidden behind a
      "✂ The rest of this reply … was cut" line. The message sent for you
      is one line, "✂ Cut and continue: " and your interjection; what Claude
@@ -264,7 +266,7 @@ conversation would get is dropped, so the main thread never hears of it.
 - `types/index.d.ts`: the shape of the values the mod keeps (the boxes, the draft being typed, the current selection)
 - `tests/interject.test.tsx`: automated tests (`claude plugin test .` in this folder)
 - `demo/`: the demo videos and pictures
-  - `demo/interject-desktop-demo.mp4`: the narrated demo in Claude Code Desktop (1080p), with a smaller copy, `demo/interject-desktop-demo-web.mp4`
+  - `demo/interject-desktop-demo.mp4`: the narrated demo in Claude Code Desktop (1080p), with two smaller copies: `demo/interject-desktop-demo-web.mp4` (1600 wide, for the blog) and `demo/interject-desktop-demo-720p.mp4` (under 10 MB, small enough for GitHub to play inside this page)
   - `demo/stills/`: one picture per feature, taken from that demo
   - `demo/video/`: the scripts that cut the demo from a screen recording, add the voiceover and music, and make the pictures. `demo/video/README.md` says how to run them
   - `demo/thread/`: a draft launch thread for X (`thread.md`), with its pictures, a 42-second teaser video, and `preview.html` to see it laid out

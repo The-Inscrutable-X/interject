@@ -94,12 +94,12 @@ Kept answers and notes go with your next message, along with the boxes they buil
 No guessing what Claude sees: click show to read the exact text that goes with your message.
 ```
 
-### 8/12  (161 of 280 characters, attach 8-cut.jpg)
+### 8/12  (131 of 280 characters, attach 8-cut.jpg)
 
 ```
 Reply going off track? Cut here and continue.
 
-Claude drops the rest of the reply, stops if it's still writing, and rewrites from that line, following your note.
+Claude drops the rest of the reply and rewrites from that line, following your note.
 ```
 
 ### 9/12  (148 of 280 characters, attach 10-fork.jpg)

@@ -19,7 +19,9 @@ narrated demo, `demo/interject-desktop-demo.mp4`, and the pictures in
   frame until the voice is free, so words and pictures stay in step. It then
   mixes the voice with the music, turning the music down while someone
   speaks.
-- `make_stills.py`: exports one picture per feature, in the same style.
+- `make_stills.py`: exports one picture per feature, in the same style. Each
+  picture has a "You click" strip, cut from the real form at the moment of
+  the click, with the clicked button boxed.
 - `make_thread_images.py`: exports 16:9 pictures for a social media thread,
   cropped tight so the text reads on a phone.
 - `make_poster.py`: makes the still picture shown before the video plays.
