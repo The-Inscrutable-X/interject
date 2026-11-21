@@ -13,19 +13,16 @@ img,video{width:100%;border-radius:12px;border:1px solid #e2ded6;display:block}
 .count{color:#9a958c;font-size:12px;text-align:right;margin-top:6px}
 </style></head><body><main><h1>Interject launch thread: draft</h1>
 <p class="note">Not linked from the site. Copy-ready text and the posting checklist are in thread.md.</p>
-<div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 1/12</span></div><div class="txt">Ever get lost halfway through a long Claude reply?
+<div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 1/12</span></div><div class="txt">Claude Code has side chats and replies, but their answers float away from the line you asked about.
 
-I built Interject, a Claude Code mod. Stop at any line and:
-• ask about it, right there
-• send an agent to dig in
-• keep the answer for your next message
-• cut the reply, and Claude rewrites from that line
+So I built Interject. At any line of a reply, you can:
+• send an agent with full tool use
+• keep its answer for your next message
+• cut, and Claude rewrites from there
 
-🧵</div><video src="interject-teaser.mp4" controls playsinline preload="metadata"></video><div class="count">261 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 2/12</span></div><div class="txt">Claude Code already has side chats and replies. But their answers float away from the line you asked about.
+🧵</div><video src="interject-teaser.mp4" controls playsinline preload="metadata"></video><div class="count">275 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 2/12</span></div><div class="txt">With Interject, each question lives in a box right under its line. You always know where to look, what you asked, and why.</div><img src="2-answer-stays-at-the-line.jpg" alt=""><div class="count">122 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 3/12</span></div><div class="txt">Select any text in a reply, even while Claude is still writing, and click ✎ Interject here.
 
-With Interject, each question lives in a box right under its line. You always know where to look, what you asked, and why.</div><img src="2-answer-stays-at-the-line.jpg" alt=""><div class="count">231 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 3/12</span></div><div class="txt">Select any text in a reply, even while Claude is still writing, and click ✎ Interject here.
-
-A small form opens right under that line, with four choices.</div><img src="3-four-choices.jpg" alt=""><div class="count">153 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 4/12</span></div><div class="txt">Quick answer: a few seconds, no tools.
+A small form opens right under that line, with four choices.</div><img src="3-four-choices.jpg" alt=""><div class="count">154 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 4/12</span></div><div class="txt">Quick answer: a few seconds, no tools.
 
 Ask on the side: a forked agent with the whole conversation and full tool use. It can read files, run commands and search the web. Nothing is added to your main conversation.</div><img src="4-side-answer-and-follow-up.jpg" alt=""><div class="count">214 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 5/12</span></div><div class="txt">Follow up on any answer, and the follow-up sits right under it.
 
@@ -35,17 +32,17 @@ Kept answers and notes go with your next message, along with the boxes they buil
 
 Claude drops the rest of the reply and rewrites from that line, following your note.</div><img src="8-cut.jpg" alt=""><div class="count">131 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 9/12</span></div><div class="txt">Any side chat can become a session of its own.
 
-In Claude Code Desktop, it&#x27;s listed under the original session, and the original hears back from it.</div><img src="10-fork.jpg" alt=""><div class="count">148 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 10/12</span></div><div class="txt">Honest limits. It&#x27;s a mod, so some parts are workarounds:
+In Claude Code Desktop, it&#x27;s listed under the original session, and the original hears back from it.</div><img src="10-fork.jpg" alt=""><div class="count">148 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 10/12</span></div><div class="txt">Limits: it&#x27;s a mod, so some parts are workarounds:
 • A cut sends a new message, and the old reply stays in history
 • Outside bypass mode, side chats and forks run in a separate terminal Claude
 • Made for Desktop. VS Code has no ✎ button
-• Side chats use your plan&#x27;s usage</div><div class="count">278 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 11/12</span></div><div class="txt">Interject is free and open source (MIT).
+• Side chats use your plan&#x27;s usage</div><div class="count">276 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 11/12</span></div><div class="txt">Interject is free and open source (MIT).
 
-Install it in Claude Code:
+Ask your Claude to install it in Claude Code, or type:
 /plugin install interject --marketplace The-Inscrutable-X/interject
 
-Code: <span class="link">github.com/The-Inscrutable-X/interject</span></div><div class="count">167 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 12/12</span></div><div class="txt">The full 3-minute demo and write-up: <span class="link">hanqixiao.github.io/blog/posts/interject/interject.html</span>
+Code: <span class="link">github.com/The-Inscrutable-X/interject</span></div><div class="count">195 / 280</div></div></div><div class="post"><div class="av">H</div><div class="body"><div class="who"><b>Hanqi Xiao</b> <span>· 12/12</span></div><div class="txt">This is a small side tool that I made by myself, mostly for myself.
 
-More of my work: <span class="link">hanqixiao.github.io</span>
+The full write-up, with a 3-minute demo: <span class="link">hanqixiao.github.io/blog/posts/interject/interject.html</span>
 
-Feedback and bug reports welcome. If this is useful, a repost of the first post helps others find it.</div><div class="count">205 / 280</div></div></div></main></body></html>
+Feedback and bug reports welcome. If it&#x27;s useful to you, a repost of the first post helps others find it.</div><div class="count">240 / 280</div></div></div></main></body></html>

@@ -1,12 +1,10 @@
 # Interject launch thread (draft)
 
 A draft of the launch thread for X. Copy each post from below. The pictures and `interject-teaser.mp4` (the video for post 1) are in this folder; `../video/make_thread_images.py` and `STORY=teaser python ../video/render.py full ...` rebuild them.
-Open `preview.html` next to this file to see the thread with its pictures.
+Open `preview.html` next to this file to see the thread with its pictures. After editing a post, run `python ../video/make_thread_preview.py`: it recounts each post the way X does (a link is 23, an emoji or a symbol like • is 2) and rebuilds the preview.
 
 ## Before posting
 
-- Make github.com/The-Inscrutable-X/interject public. It is private now, so the link and the install command fail for readers.
-- Publish the blog post, so its link works.
 - Upload interject-teaser.mp4 to post 1 and the pictures to their posts.
 - After posting, pin the thread to your profile.
 
@@ -15,7 +13,7 @@ Open `preview.html` next to this file to see the thread with its pictures.
 What the research says works for a launch thread, and how this draft follows it.
 These come from growth blogs and tool makers, not from X, so treat them as good habits rather than proven rules.
 
-- The first post decides whether anyone opens the rest. It names a pain the reader has felt, says what you built, and lists the main features. Post 1 does this.
+- The first post decides whether anyone opens the rest. It names a pain the reader has felt, says what you built, and names only the most important features. Post 1 does this.
 - Put a short video on the first post: under about 45 seconds, starting on the result, with captions burned in, because X plays video muted. interject-teaser.mp4 is 42 seconds, opens on a real reply, and has subtitles. The 3-minute demo is too long for X unless the account has Premium (the limit is 2 min 20 s without it).
 - One idea per post, each with a picture. Pictures are 16:9, so X shows them uncropped, and they are cropped tight so the text reads on a phone.
 - 7 to 12 posts tends to do best. This draft has 12.
@@ -26,37 +24,35 @@ These come from growth blogs and tool makers, not from X, so treat them as good 
 
 ## Other first lines to try
 
-1. Ever get lost halfway through a long Claude reply? (used in the draft)
-2. Claude wrote you 2,000 words. You're stuck on line 40. Now what?
-3. I kept losing my place in long Claude replies, so I built a way to ask about any line, right where I'm reading.
-4. What if you could stop Claude at any line of its reply and ask "wait, what does that mean?"
-5. Side chats float away and replies scroll off. I wanted my questions to stay where I asked them.
+1. Claude Code has side chats and replies, but their answers float away from the line you asked about. (used in the draft)
+2. Ever get lost halfway through a long Claude reply?
+3. Claude wrote you 2,000 words. You're stuck on line 40. Now what?
+4. I kept losing my place in long Claude replies, so I built a way to ask about any line, right where I'm reading.
+5. What if you could stop Claude at any line of its reply and ask "wait, what does that mean?"
+6. Side chats float away and replies scroll off. I wanted my questions to stay where I asked them.
 
 ## The thread
 
-### 1/12  (261 of 280 characters, attach interject-teaser.mp4)
+### 1/12  (275 of 280 characters, attach interject-teaser.mp4)
 
 ```
-Ever get lost halfway through a long Claude reply?
+Claude Code has side chats and replies, but their answers float away from the line you asked about.
 
-I built Interject, a Claude Code mod. Stop at any line and:
-• ask about it, right there
-• send an agent to dig in
-• keep the answer for your next message
-• cut the reply, and Claude rewrites from that line
+So I built Interject. At any line of a reply, you can:
+• send an agent with full tool use
+• keep its answer for your next message
+• cut, and Claude rewrites from there
 
 🧵
 ```
 
-### 2/12  (231 of 280 characters, attach 2-answer-stays-at-the-line.jpg)
+### 2/12  (122 of 280 characters, attach 2-answer-stays-at-the-line.jpg)
 
 ```
-Claude Code already has side chats and replies. But their answers float away from the line you asked about.
-
 With Interject, each question lives in a box right under its line. You always know where to look, what you asked, and why.
 ```
 
-### 3/12  (153 of 280 characters, attach 3-four-choices.jpg)
+### 3/12  (154 of 280 characters, attach 3-four-choices.jpg)
 
 ```
 Select any text in a reply, even while Claude is still writing, and click ✎ Interject here.
@@ -110,35 +106,35 @@ Any side chat can become a session of its own.
 In Claude Code Desktop, it's listed under the original session, and the original hears back from it.
 ```
 
-### 10/12  (278 of 280 characters)
+### 10/12  (276 of 280 characters)
 
 ```
-Honest limits. It's a mod, so some parts are workarounds:
+Limits: it's a mod, so some parts are workarounds:
 • A cut sends a new message, and the old reply stays in history
 • Outside bypass mode, side chats and forks run in a separate terminal Claude
 • Made for Desktop. VS Code has no ✎ button
 • Side chats use your plan's usage
 ```
 
-### 11/12  (167 of 280 characters)
+### 11/12  (195 of 280 characters)
 
 ```
 Interject is free and open source (MIT).
 
-Install it in Claude Code:
+Ask your Claude to install it in Claude Code, or type:
 /plugin install interject --marketplace The-Inscrutable-X/interject
 
 Code: github.com/The-Inscrutable-X/interject
 ```
 
-### 12/12  (205 of 280 characters)
+### 12/12  (240 of 280 characters)
 
 ```
-The full 3-minute demo and write-up: hanqixiao.github.io/blog/posts/interject/interject.html
+This is a small side tool that I made by myself, mostly for myself.
 
-More of my work: hanqixiao.github.io
+The full write-up, with a 3-minute demo: hanqixiao.github.io/blog/posts/interject/interject.html
 
-Feedback and bug reports welcome. If this is useful, a repost of the first post helps others find it.
+Feedback and bug reports welcome. If it's useful to you, a repost of the first post helps others find it.
 ```
 
 ## Sources

@@ -24,6 +24,8 @@ narrated demo, `demo/interject-desktop-demo.mp4`, and the pictures in
   the click, with the clicked button boxed.
 - `make_thread_images.py`: exports 16:9 pictures for a social media thread,
   cropped tight so the text reads on a phone.
+- `make_thread_preview.py`: recounts the X thread posts in `demo/thread/thread.md`
+  the way X counts them and rebuilds `demo/thread/preview.html`.
 - `make_poster.py`: makes the still picture shown before the video plays.
 
 ## Running it
