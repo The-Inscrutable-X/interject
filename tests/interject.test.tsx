@@ -44,6 +44,27 @@ const BAND = (surface: 'terminal' | 'desktop') =>
     props: { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 80, scroll: { offset: 0, bodyRows: 6 }, view: {} },
   }) as const
 
+/** A message row of the person's: `text` as stored, from `origin`. */
+const USER = (
+  surface: 'terminal' | 'desktop',
+  text: string,
+  origin: { kind: 'composer' } | { kind: 'plugin'; name: string },
+  isExpanded: boolean,
+) =>
+  ({
+    plugin: 'interject',
+    surface,
+    component: 'UserMessage',
+    requestId: 'u1',
+    props: { text, origin, isExpanded },
+  }) as const
+
+/** What the mod added under the person's message, as one text; empty when it added nothing. */
+function attachedOf(text: string): string[] {
+  const m = /\n\n\[interject: \d+ box(?:es)? attached to this message\]\n/.exec(text)
+  return m === null ? [] : [text.slice(m.index + m[0].length)]
+}
+
 const USAGE = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
 type On = Parameters<Parameters<typeof test>[1]>[1]
@@ -262,8 +283,10 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     const { world } = engine(on, surface)
     world.selection = { text: LINE, requestId: 'm1' }
     let sentContext: readonly string[] = []
+    let sentText = ''
     on('prompt.submit', (_, e) => {
-      sentContext = e.context ?? []
+      sentContext = attachedOf(e.text)
+      sentText = e.text
       return { text: e.text, context: e.context }
     })
     await begin($, surface)
@@ -275,12 +298,20 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     expect((await message.find({ type: 'Text', text: /engine:/ }))?.text).not.toContain('Finally')
 
     await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+    expect(sentText.startsWith('go on\n\n[interject: 1 box attached to this message]\n')).toBe(true)
     expect(sentContext.length).toBe(1)
     expect(sentContext[0]).toContain('> Then the **feeder** turns the plate.')
     expect(sentContext[0]).toContain('Which plate?')
 
     await message.redraw()
     expect(await message.find({ type: 'Text', text: /Attached to your message/ })).toBeDefined()
+    // The box shows what went with the message on a press, and folds it again.
+    expect(await message.find({ type: 'Text', text: sentContext[0] ?? '' })).toBeUndefined()
+    await message.press({ key: await firstKey(message, 'sent-') })
+    expect(await message.find({ type: 'Text', text: sentContext[0] ?? '' })).toBeDefined()
+    expect((await message.find({ key: await firstKey(message, 'sent-') }))?.props?.label).toBe('▴ hide what was sent')
+    await message.press({ key: await firstKey(message, 'sent-') })
+    expect(await message.find({ type: 'Text', text: sentContext[0] ?? '' })).toBeUndefined()
     await message.unmount()
   })
 
@@ -332,9 +363,36 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     expect(prompt).toContain('Which tank?')
 
     const message = await $.ui.mount(MESSAGE(surface))
-    expect(await message.find({ type: 'Text', text: /\? Which tank\?/ })).toBeDefined()
+    // A box starts with its line, small and quoted, then the question with no mark before it.
+    const line = await message.find({ type: 'Text', text: '“It sits under the tank.”' })
+    expect(line?.props?.size).toBe('caption')
+    expect(await message.find({ type: 'Text', text: 'Which tank?' })).toBeDefined()
+    expect(await message.find({ type: 'Text', text: /^\? / })).toBeUndefined()
     expect(await message.find({ type: 'Markdown', text: /40-litre tank/ })).toBeDefined()
     await message.unmount()
+  })
+
+  test(`a box quotes just the part of the line that was selected (${surface})`, async ($, on) => {
+    const { world } = engine(on, surface)
+    world.selection = { text: 'the feeder\nturns', requestId: 'm1' }
+    world.answers.push('The round plate.')
+    await begin($, surface)
+    await interject($, surface, 'Why?', 'enter')
+    const message = await $.ui.mount(MESSAGE(surface))
+    expect(await message.find({ type: 'Text', text: '“the feeder turns”' })).toBeDefined()
+    expect(await message.find({ type: 'Text', text: '“' + LINE + '”' })).toBeUndefined()
+    // A follow-up is about the same words.
+    await message.press({ key: await firstKey(message, 'follow-') })
+    await message.unmount()
+    const form = await $.ui.mount(surface === 'terminal' ? PANE(surface) : MESSAGE(surface))
+    await form.input({ key: 'question', text: 'And then?', kind: 'submit' })
+    await form.unmount()
+    await finish($)
+    // The follow-up names the question it follows instead of quoting the line again.
+    const again = await $.ui.mount(MESSAGE(surface))
+    expect((await again.findAll({ type: 'Text', text: '“the feeder turns”' })).length).toBe(1)
+    expect(await again.find({ type: 'Text', text: '↳ follows up: Why?' })).toBeDefined()
+    await again.unmount()
   })
 
   test(`keep: a side answer goes with the next prompt (${surface})`, async ($, on) => {
@@ -343,7 +401,7 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     world.answers.push('The round feedplate.')
     let sentContext: readonly string[] = []
     on('prompt.submit', (_, e) => {
-      sentContext = e.context ?? []
+      sentContext = attachedOf(e.text)
       return { text: e.text }
     })
     await begin($, surface)
@@ -365,7 +423,7 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     world.answers.push('Use the round plate.\n\nIt sits under the tank.', 'The tank.\n\nIt holds 40 litres.', 'Water.')
     let sentContext: readonly string[] = []
     on('prompt.submit', (_, e) => {
-      sentContext = e.context ?? []
+      sentContext = attachedOf(e.text)
       return { text: e.text }
     })
     await begin($, surface)
@@ -405,7 +463,7 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     world.answers.push('Use the round plate.\n\nIt sits under the tank.', 'The tank.\n\nIt holds 40 litres.', 'Water.')
     let sentContext: readonly string[] = []
     on('prompt.submit', (_, e) => {
-      sentContext = e.context ?? []
+      sentContext = attachedOf(e.text)
       return { text: e.text }
     })
     await begin($, surface)
@@ -420,7 +478,7 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     await interject($, surface, 'Of what?', 'enter')
 
     const message = await $.ui.mount(MESSAGE(surface))
-    expect(await message.find({ type: 'Text', text: /\? Of what\?/ })).toBeDefined()
+    expect(await message.find({ type: 'Text', text: 'Of what?' })).toBeDefined()
     // A box's buttons follow the boxes inside it: the first keep is the
     // innermost box's, the last dismiss the outermost's.
     await message.press({ key: await firstKey(message, 'keep-') })
@@ -428,7 +486,7 @@ for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
     const dismisses = (await message.findAll({ type: 'Button' })).map(b => b.key ?? '').filter(k => k.startsWith('dismiss-'))
     expect(dismisses.length).toBe(3)
     await message.press({ key: dismisses.at(-1) ?? '' })
-    expect(await message.find({ type: 'Text', text: /\? Of what\?/ })).toBeUndefined()
+    expect(await message.find({ type: 'Text', text: 'Of what?' })).toBeUndefined()
 
     await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
     expect(sentContext.join('\n')).not.toContain('Of what?')
@@ -639,6 +697,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     world.selection = { text: LINE, requestId: 'm1' }
     let aborted = ''
     let submitted = ''
+    let hidden = ''
     on('turn.start', (_, e) => ({ turnId: e.turnId }))
     on('turn.abort', (_, e) => {
       aborted = e.turnId
@@ -648,15 +707,24 @@ for (const surface of ['terminal', 'desktop'] as const) {
       submitted = e.text
       return { text: e.text }
     })
+    // The note the mod adds for Claude before the message.
+    on('session.append', (_, e, next) => {
+      if (e.door === 'note') hidden += e.message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
+      return next(e)
+    })
     await begin($, surface)
     await $.turn.start({ text: 'explain the rig', turnId: 't1' })
     await interject($, surface, 'Why turn it?', 'cut')
+    // The turn the cut's message starts: its note goes with that turn's first request.
+    expect(hidden).toBe('')
+    await $.turn.start({ text: submitted, turnId: 't2' })
 
     expect(aborted).toBe('t1')
-    expect(submitted).toContain('[interject: cut and continue]')
-    expect(submitted).toContain('> Then the **feeder** turns the plate.')
-    expect(submitted).toContain('My interjection: Why turn it?')
-    expect(submitted).not.toContain('Finally the server saves the run.')
+    // The message is one short line; what Claude needs to continue goes before it, unseen.
+    expect(submitted).toBe('✂ Cut and continue: Why turn it?')
+    expect(hidden).toContain('> Then the **feeder** turns the plate.')
+    expect(hidden).toContain('My interjection: Why turn it?')
+    expect(hidden).not.toContain('Finally the server saves the run.')
 
     // The part being written is stored ending at the line.
     const stored = await $.session.append({
@@ -671,7 +739,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     const message = await $.ui.mount(MESSAGE(surface))
     expect(await message.find({ type: 'Text', text: /The rest of this reply \(1 line\) was cut/ })).toBeDefined()
-    expect(await message.find({ type: 'Text', text: /✂ Why turn it\?/ })).toBeDefined()
+    expect(await message.find({ type: 'Text', text: 'Why turn it?' })).toBeDefined()
+    // The box shows the whole message on a press.
+    // In the order Claude read it: the note, then the message.
+    const whole = hidden + '\n\n' + submitted
+    expect(await message.find({ type: 'Text', text: whole })).toBeUndefined()
+    await message.press({ key: await firstKey(message, 'sent-') })
+    expect(await message.find({ type: 'Text', text: whole })).toBeDefined()
     await message.unmount()
   })
 
@@ -691,6 +765,72 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await form.find({ key: 'question' })).toBeDefined()
     expect(await form.find({ type: 'Text', text: /feeder/ })).toBeDefined()
     await form.unmount()
+  })
+
+  test(`the band says in its one row what goes with the next message; its text opens at the end of the reply (${surface})`, async ($, on) => {
+    const { world, clock } = engine(on, surface)
+    world.selection = { text: LINE, requestId: 'm1' }
+    world.answers.push('Use the round plate.\n\nIt sits under the tank.', 'The tank.')
+    let sentContext: readonly string[] = []
+    on('prompt.submit', (_, e) => {
+      sentContext = attachedOf(e.text)
+      return { text: e.text }
+    })
+    await begin($, surface)
+    await interject($, surface, 'Which plate?', 'enter')
+    const drawn = await $.ui.mount(MESSAGE(surface))
+    await drawn.unmount()
+    world.selection = { text: 'It sits under the tank.', requestId: 'm1' }
+    await interject($, surface, 'Which tank?', 'enter')
+    world.selection = undefined
+
+    // Nothing kept: the band draws nothing of the mod's.
+    const empty = await $.ui.mount(BAND(surface))
+    expect(await empty.find({ key: 'interject-preview' })).toBeUndefined()
+    await empty.unmount()
+
+    // Keep the inner box (the first keep drawn): it and the box it sits in go.
+    const message = await $.ui.mount(MESSAGE(surface))
+    await message.press({ key: await firstKey(message, 'keep-') })
+    await message.unmount()
+
+    // The band: one row, with the count as a button.
+    const band = await $.ui.mount(BAND(surface))
+    const count = await band.find({ key: 'interject-preview' })
+    expect(count?.props?.label).toBe('📎 2 boxes go with your next message · show')
+    expect(await band.find({ key: 'interject-here' })).toBeUndefined()
+    await band.press({ key: 'interject-preview' })
+    await band.unmount()
+
+    // Pressed, the exact text opens at the end of the latest reply.
+    const reply = await $.ui.mount(MESSAGE(surface))
+    const shown = String((await reply.find({ type: 'Text', text: /The exchanges they kept/ }))?.text ?? '')
+    expect(shown).toContain('The user asked: Which plate?')
+    expect(shown).toContain('The user asked: Which tank?')
+    await reply.unmount()
+
+    // While a line is selected, ✎ and the count share the one row.
+    world.selection = { text: LINE, requestId: 'm1' }
+    await clock.advance(500)
+    const selecting = await $.ui.mount(BAND(surface))
+    const row = (await selecting.findAll({ type: 'Box' })).find(b => b.props?.flexDirection === 'row')
+    const keysInRow = (await selecting.findAll({ type: 'Button' })).map(b => b.key)
+    expect(row).toBeDefined()
+    expect(keysInRow).toEqual(['interject-here', 'interject-preview'])
+    expect((await selecting.find({ key: 'interject-preview' }))?.props?.label).toBe('📎 2 boxes go with your next message · hide')
+    await selecting.unmount()
+    world.selection = undefined
+    await clock.advance(500)
+
+    // What was shown is what is sent; after that the band and the reply drop it.
+    await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+    expect(sentContext.join('\n\n')).toBe(shown)
+    const after = await $.ui.mount(BAND(surface))
+    expect(await after.find({ key: 'interject-preview' })).toBeUndefined()
+    await after.unmount()
+    const closed = await $.ui.mount(MESSAGE(surface))
+    expect(await closed.find({ type: 'Text', text: /The exchanges they kept/ })).toBeUndefined()
+    await closed.unmount()
   })
 }
 
@@ -729,7 +869,7 @@ for (const surface of ['desktop', 'vscode'] as const) {
     }
     expect(world.draws).toBe(before)
     await message.press({ key: 'queue' })
-    expect(await message.find({ type: 'Text', text: /\+ Which plate\?/ })).toBeDefined()
+    expect(await message.find({ type: 'Text', text: 'Which plate?' })).toBeDefined()
     await message.unmount()
   })
 
@@ -907,8 +1047,8 @@ test('a cut that could not be sent waits for Enter, and goes with the next promp
     return { isFilled: true }
   })
   on('prompt.submit', (_, e) => {
-    if (e.text.startsWith('[interject')) return { drop: 'the session was stopped and nobody has sent input since' }
-    sentContext = e.context ?? []
+    if (e.text.startsWith('✂ Cut and continue')) return { drop: 'the session was stopped and nobody has sent input since' }
+    sentContext = attachedOf(e.text)
     return { text: e.text }
   })
   await begin($, 'terminal')
@@ -1040,7 +1180,7 @@ test('Desktop: a message sent from its own box takes what was added to the next 
   world.selection = { text: LINE, requestId: 'm1' }
   let sentContext: readonly string[] = []
   on('prompt.submit', (_, e) => {
-    sentContext = e.context ?? []
+    sentContext = attachedOf(e.text)
     return { text: e.text, context: e.context }
   })
   await begin($, 'desktop')
@@ -1075,4 +1215,535 @@ test('from the keyboard: /interject ask asks at the last line, /interject fork f
   expect(card?.input.initiation).toBe('own_initiative')
   expect(String(card?.input.prompt)).toContain('The round feedplate.')
   await message.unmount()
+})
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`a message sent with boxes: drawn as typed, with a small line, and all of it on a press (${surface})`, async ($, on) => {
+    const { world } = engine(on, surface)
+    world.selection = { text: LINE, requestId: 'm1' }
+    let sentText = ''
+    on('prompt.submit', (_, e) => {
+      sentText = e.text
+      return { text: e.text }
+    })
+    await begin($, surface)
+    await interject($, surface, 'Which plate?', 'queue')
+    await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+
+    // Desktop says every row is drawn in full; the terminal says so only in ctrl+o.
+    const row = await $.ui.mount(USER(surface, sentText, { kind: 'composer' }, surface === 'desktop'))
+    expect((await row.find({ type: 'Text', text: /engine:/ }))?.text).not.toContain('attached')
+    expect(await row.find({ type: 'Text', text: '📎 Sent with 1 box' })).toBeDefined()
+    expect(await row.find({ type: 'Text', text: /Which plate\?/ })).toBeUndefined()
+    await row.press({ key: 'full-u1' })
+    expect(await row.find({ type: 'Text', text: /Which plate\?/ })).toBeDefined()
+    expect((await row.find({ key: 'full-u1' }))?.props?.label).toBe('▴ hide')
+    await row.press({ key: 'full-u1' })
+    expect(await row.find({ type: 'Text', text: /Which plate\?/ })).toBeUndefined()
+    await row.unmount()
+  })
+}
+
+test('ctrl+o in the terminal shows a message with boxes in full, as stored', async ($, on) => {
+  engine(on, 'terminal')
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const text = 'go on\n\n[interject: 1 box attached to this message]\nWhile reading your earlier reply, the user interjected.'
+  const row = await $.ui.mount(USER('terminal', text, { kind: 'composer' }, true))
+  expect((await row.find({ type: 'Text', text: /engine:/ }))?.text).toContain('the user interjected')
+  expect(await row.find({ key: 'full-u1' })).toBeUndefined()
+  await row.unmount()
+})
+
+/** A new reply row, as Claude's answer to the person's last message draws it. */
+const ANSWER = (surface: 'terminal' | 'desktop') =>
+  ({
+    plugin: 'interject',
+    surface,
+    component: 'AssistantMessage',
+    requestId: 'm2',
+    props: { text: 'Here is the answer.', isFirstOfReply: true },
+  }) as const
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`a message sent with boxes: what went with it is saved once, and the answer's top line shows it (${surface})`, async ($, on) => {
+    const { world, clock } = engine(on, surface)
+    world.selection = { text: LINE, requestId: 'm1' }
+    world.answers.push('Use the round plate.\n\nIt sits under the tank.', 'The tank.')
+    let sent: readonly string[] = []
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('prompt.submit', (_, e) => {
+      sent = attachedOf(e.text)
+      return { text: e.text }
+    })
+    await begin($, surface)
+    await interject($, surface, 'Which plate?', 'enter')
+    const drawn = await $.ui.mount(MESSAGE(surface))
+    await drawn.unmount()
+    world.selection = { text: 'It sits under the tank.', requestId: 'm1' }
+    await interject($, surface, 'Which tank?', 'enter')
+    // Keep both boxes: one message takes both.
+    const message = await $.ui.mount(MESSAGE(surface))
+    for (const key of (await message.findAll({ type: 'Button' })).map(b => b.key ?? '').filter(k => k.startsWith('keep-'))) {
+      if (await message.find({ key })) await message.press({ key })
+    }
+    await message.unmount()
+
+    await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+    await $.turn.start({ text: 'go on', turnId: 't2' })
+    const whole = sent[0] ?? ''
+    expect(whole).toContain('The user asked: Which tank?')
+
+    // Saved once, in a file of its own; the boxes hold only its id.
+    const files = [...world.files.entries()]
+    expect(files.filter(([path, text]) => path.includes('/sent/') && text === whole).length).toBe(1)
+    const pages = files.filter(([path]) => /\/s1\/\d+\.json$/.test(path)).map(([, text]) => text).join('')
+    expect(pages).not.toContain('The exchanges they kept')
+    const ids = new Set((JSON.parse(world.files.get('/home/t/.claude/interject-boxes/s1/0.json') ?? '[]') as { sentId?: string }[]).map(n => n.sentId))
+    ids.delete(undefined)
+    expect(ids.size).toBe(1)
+
+    // The first new row of the answer: a 📎 line in Desktop; the terminal shows it on the message row.
+    const answer = await $.ui.mount(ANSWER(surface))
+    if (surface === 'terminal') {
+      expect(await answer.find({ type: 'Text', text: /^📎/ })).toBeUndefined()
+      await answer.unmount()
+      return
+    }
+    expect(await answer.find({ type: 'Text', text: '📎 Your message went with 2 boxes' })).toBeDefined()
+    expect((await answer.find({ type: 'Text', text: /engine:/ }))?.text).toContain('Here is the answer.')
+    const key = (await answer.findAll({ type: 'Button' })).map(b => b.key ?? '').find(k => k.startsWith('send-')) ?? ''
+    await answer.press({ key })
+    expect(await answer.find({ type: 'Text', text: whole })).toBeDefined()
+    await answer.unmount()
+
+    // The clock saves which row took it: drawn again later, it is still there; the older reply has none.
+    await clock.advance(500)
+    expect(world.files.get('/home/t/.claude/interject-boxes/s1/sends.json')).toContain('"row":"m2"')
+    const again = await $.ui.mount(ANSWER(surface))
+    expect(await again.find({ type: 'Text', text: '📎 Your message went with 2 boxes' })).toBeDefined()
+    await again.unmount()
+    const older = await $.ui.mount(MESSAGE(surface))
+    expect(await older.find({ type: 'Text', text: /^📎 Your message went/ })).toBeUndefined()
+    await older.unmount()
+  })
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`a note that follows up on a kept box: the kept exchange goes once, and the note names it (${surface})`, async ($, on) => {
+    const { world } = engine(on, surface)
+    world.selection = { text: LINE, requestId: 'm1' }
+    world.answers.push('A debugging log.')
+    let sent = ''
+    on('prompt.submit', (_, e) => {
+      sent = attachedOf(e.text).join('')
+      return { text: e.text }
+    })
+    await begin($, surface)
+    await interject($, surface, "What's the trace?", 'enter')
+    const message = await $.ui.mount(MESSAGE(surface))
+    await message.press({ key: await firstKey(message, 'keep-') })
+    await message.press({ key: await firstKey(message, 'follow-') })
+    await message.unmount()
+    const form = await $.ui.mount(surface === 'terminal' ? PANE(surface) : MESSAGE(surface))
+    await form.input({ key: 'question', text: 'Good idea, do it.', kind: 'change' })
+    await form.press({ key: 'queue' })
+    await form.unmount()
+
+    await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+    expect(sent.split("The user asked: What's the trace?").length - 1).toBe(1)
+    expect(sent.split('A debugging log.').length - 1).toBe(1)
+    expect(sent).toContain('It builds on an exchange given above: "What\'s the trace?".')
+    expect(sent).toContain('Their note or question: Good idea, do it.')
+  })
+
+  test(`boxes at one line are drawn in thread order: a follow-up right after the box it follows (${surface})`, async ($, on) => {
+    const { world } = engine(on, surface)
+    world.selection = { text: LINE, requestId: 'm1' }
+    world.answers.push('Answer A.', 'Answer B.', 'Answer C.')
+    await begin($, surface)
+    await interject($, surface, 'Question A?', 'enter')
+    await interject($, surface, 'Question B?', 'enter')
+    const message = await $.ui.mount(MESSAGE(surface))
+    await message.press({ key: await firstKey(message, 'follow-') })
+    await message.unmount()
+    const form = await $.ui.mount(surface === 'terminal' ? PANE(surface) : MESSAGE(surface))
+    await form.input({ key: 'question', text: 'Question C?', kind: 'submit' })
+    await form.unmount()
+    await finish($)
+
+    const drawn = await $.ui.mount(MESSAGE(surface))
+    const order = (await drawn.findAll({ type: 'Text' })).map(t => String(t.text ?? '')).filter(t => /^Question [ABC]\?$/.test(t))
+    expect(order).toEqual(['Question A?', 'Question C?', 'Question B?'])
+    expect(await drawn.find({ type: 'Text', text: '↳ follows up: Question A?' })).toBeDefined()
+    await drawn.unmount()
+  })
+}
+
+for (const surface of ['desktop', 'vscode'] as const) {
+  test(`a second follow-up on a box: its form and then its box sit right under that box, before the first follow-up (${surface})`, async ($, on) => {
+    const { world } = engine(on, surface)
+    world.selection = { text: LINE, requestId: 'm1' }
+    world.answers.push('Answer A.', 'Answer B.', 'Answer C.')
+    await begin($, surface)
+    await interject($, surface, 'Question A?', 'enter')
+    const followA = async () => {
+      const message = await $.ui.mount(MESSAGE(surface))
+      await message.press({ key: await firstKey(message, 'follow-') })
+      await message.unmount()
+    }
+    await followA()
+    const first = await $.ui.mount(MESSAGE(surface))
+    await first.input({ key: 'question', text: 'Question B?', kind: 'submit' })
+    await first.unmount()
+    await finish($)
+
+    // Follow up on A again: the form opens between A and B.
+    await followA()
+    const form = await $.ui.mount(MESSAGE(surface))
+    const texts = (await form.findAll({ type: 'Text' })).map(t => String(t.text ?? ''))
+    const at = (t: string) => texts.indexOf(t)
+    expect(at('Question A?')).toBeLessThan(at('✎ Interject at this line'))
+    expect(at('✎ Interject at this line')).toBeLessThan(at('Question B?'))
+    await form.input({ key: 'question', text: 'Question C?', kind: 'submit' })
+    await form.unmount()
+    await finish($)
+
+    const drawn = await $.ui.mount(MESSAGE(surface))
+    const order = (await drawn.findAll({ type: 'Text' })).map(t => String(t.text ?? '')).filter(t => /^Question [ABC]\?$/.test(t))
+    expect(order).toEqual(['Question A?', 'Question C?', 'Question B?'])
+    await drawn.unmount()
+    // The side chat is told it is a follow-up, not a line of an answer.
+    expect(world.forkPrompts.at(-1)).toContain('Now they follow up on the last of those questions, about the same line:')
+    expect(world.forkPrompts.at(-1)).not.toContain('last side answer')
+  })
+}
+
+test('what is sent names the box each follow-up builds on, and quotes the line once', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  world.answers.push('Answer A.', 'Answer B.', 'Answer C.')
+  let sent = ''
+  on('prompt.submit', (_, e) => {
+    sent = attachedOf(e.text).join('')
+    return { text: e.text }
+  })
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Question A?', 'enter')
+  // B follows up on A, C follows up on B.
+  for (const [question, follows] of [['Question B?', 'Question A?'], ['Question C?', 'Question B?']] as const) {
+    const message = await $.ui.mount(MESSAGE('desktop'))
+    const boxes = (await message.findAll({ type: 'Button' })).map(b => b.key ?? '').filter(k => k.startsWith('follow-'))
+    const texts = (await message.findAll({ type: 'Text' })).map(t => String(t.text ?? ''))
+    const order = texts.filter(t => /^Question [ABC]\?$/.test(t))
+    await message.press({ key: boxes[order.indexOf(follows)] ?? '' })
+    await message.unmount()
+    const form = await $.ui.mount(MESSAGE('desktop'))
+    await form.input({ key: 'question', text: question, kind: 'submit' })
+    await form.unmount()
+    await finish($)
+  }
+  const message = await $.ui.mount(MESSAGE('desktop'))
+  const keeps = (await message.findAll({ type: 'Button' })).map(b => b.key ?? '').filter(k => k.startsWith('keep-'))
+  const order = (await message.findAll({ type: 'Text' })).map(t => String(t.text ?? '')).filter(t => /^Question [ABC]\?$/.test(t))
+  await message.press({ key: keeps[order.indexOf('Question C?')] ?? '' })
+  await message.unmount()
+
+  await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+  expect(sent.split('At this line:').length - 1).toBe(1)
+  expect(sent).toContain('Following up on "Question A?":\nThe user asked: Question B?')
+  expect(sent).toContain('Following up on "Question B?":\nThe user asked: Question C?')
+})
+
+const ROW = (surface: 'terminal' | 'desktop', id: string, text: string) =>
+  ({ plugin: 'interject', surface, component: 'AssistantMessage', requestId: id, props: { text, isFirstOfReply: true } }) as const
+
+test('a message typed while Claude works: no row of the running reply takes its 📎 line', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Which plate?', 'queue')
+  // Claude is working on an earlier prompt (t1); the person types with the box queued.
+  await $.turn.start({ text: 'earlier prompt', turnId: 't1' })
+  await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' }, turnId: 't1' } as never)
+  // t1 draws another block of its own reply (after a tool call, say).
+  const old = await $.ui.mount(ROW('desktop', 'm1b', 'Still answering the earlier prompt.'))
+  const onOld = await old.find({ type: 'Text', text: /^📎 Your message went/ })
+  await old.unmount()
+  expect(onOld).toBeUndefined()
+})
+
+test('a send whose turn draws no row: a later answer does not take its 📎 line', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Which plate?', 'queue')
+  await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+  await $.turn.start({ text: 'go on', turnId: 't2' })
+  // The person presses Esc before any text: the turn ends with no reply row.
+  await $.turn.complete({ turnId: 't2', answer: '', durationMs: 1, isAborted: true, reason: 'aborted' } as never)
+  // A later plain message, no boxes.
+  await $.prompt.submit({ text: 'unrelated', wait: false, origin: { kind: 'composer' } })
+  await $.turn.start({ text: 'unrelated', turnId: 't3' })
+  const later = await $.ui.mount(ROW('desktop', 'm3', 'Answer to unrelated.'))
+  const wrong = await later.find({ type: 'Text', text: /^📎 Your message went/ })
+  await later.unmount()
+  expect(wrong).toBeUndefined()
+})
+
+test('a cut that is not sent leaves no note for Claude, and once dismissed adds nothing', async ($, on) => {
+  const { world } = engine(on)
+  world.selection = { text: LINE, requestId: 'm1' }
+  const notes: string[] = []
+  on('prompt.fill', () => ({ isFilled: true }))
+  on('session.append', (_, e, next) => {
+    if (e.door === 'note') notes.push(e.message.content.map(b => (b.type === 'text' ? b.text : '')).join(''))
+    return next(e)
+  })
+  let sent = ''
+  on('prompt.submit', (_, e) => {
+    if (e.text.startsWith('✂ Cut and continue')) return { drop: 'the session was stopped' }
+    sent = e.text
+    return { text: e.text }
+  })
+  await begin($, 'terminal')
+  await interject($, 'terminal', 'Why turn it?', 'cut')
+  const message = await $.ui.mount(MESSAGE('terminal'))
+  await message.press({ key: await firstKey(message, 'dismiss-') })
+  await message.unmount()
+  await $.prompt.submit({ text: 'something else', wait: false, origin: { kind: 'composer' } })
+  // The dismissed cut adds nothing to the message ...
+  expect(sent).toBe('something else')
+  // ... but its note was appended and waits for the next request.
+  expect(notes.length).toBe(0)
+})
+
+test('the preview closes on a switch to another conversation', async ($, on) => {
+  const { world, clock } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Which plate?', 'queue')
+  const band = await $.ui.mount(BAND('desktop'))
+  await band.press({ key: 'interject-preview' })
+  await band.unmount()
+  const dir = '/home/t/.claude/interject-boxes'
+  world.files.set(dir + '/s2/0.json', JSON.stringify([{ id: 'q9', requestId: 'm1', mode: 'queue', status: 'queued', question: 'Other?', quote: LINE }]))
+  world.sessionId = 's2'
+  world.selection = undefined
+  await clock.advance(2000)
+  const band2 = await $.ui.mount(BAND('desktop'))
+  const label = (await band2.find({ key: 'interject-preview' }))?.props?.label
+  await band2.unmount()
+  expect(label).toBe('📎 1 box goes with your next message · show')
+})
+
+test('a cut message from before is still drawn as one line', async ($, on) => {
+  engine(on, 'terminal')
+  await begin($, 'terminal')
+  const old = '[interject: cut and continue]\nI stopped reading your reply at this line:\n> x\n<kept_reply>\nlots\n</kept_reply>\n\nMy interjection: Why?'
+  const row = await $.ui.mount(USER('terminal', old, { kind: 'plugin', name: 'interject' }, false))
+  const t = (await row.find({ type: 'Text', text: /engine:/ }))?.text ?? ''
+  await row.unmount()
+  expect(String(t)).not.toContain('kept_reply')
+})
+
+test('a pasted marker: the row splits at the mod\'s own, the last one', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  let sentText = ''
+  on('prompt.submit', (_, e) => {
+    sentText = e.text
+    return { text: e.text }
+  })
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Which plate?', 'queue')
+  const typed = 'Earlier I sent:\n\n[interject: 3 boxes attached to this message]\nold stuff\n\nwhat do you think?'
+  await $.prompt.submit({ text: typed, wait: false, origin: { kind: 'composer' } })
+  const row = await $.ui.mount(USER('desktop', sentText, { kind: 'composer' }, true))
+  const own = String((await row.find({ type: 'Text', text: /engine:/ }))?.text ?? '')
+  const count = await row.find({ type: 'Text', text: '📎 Sent with 1 box' })
+  await row.unmount()
+  expect(own).toContain('what do you think?')
+  expect(count).toBeDefined()
+})
+
+test('a refused cut note: the message stays one line, and a notice says Claude only has the interjection', async ($, on) => {
+  const { world } = engine(on, 'terminal')
+  world.selection = { text: LINE, requestId: 'm1' }
+  let submitted = ''
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('session.append', (_, e, next) => (e.door === 'note' ? ({ deny: 'policy' } as never) : next(e)))
+  on('prompt.submit', (_, e) => {
+    submitted = e.text
+    return { text: e.text }
+  })
+  await begin($, 'terminal')
+  await interject($, 'terminal', 'Why turn it?', 'cut')
+  await $.turn.start({ text: submitted, turnId: 't2' })
+  expect(submitted).toBe('✂ Cut and continue: Why turn it?')
+  expect(world.toasts.some(t => t.includes('could not give Claude'))).toBe(true)
+})
+
+test('a cut message with its instructions in it (from before, or a refused note) is drawn as one line', async ($, on) => {
+  engine(on, 'terminal')
+  await begin($, 'terminal')
+  const text = '✂ Cut and continue: Why?\n\nI stopped reading your reply at this line:\n> x\n<kept_reply>\nlots\n</kept_reply>'
+  const row = await $.ui.mount(USER('terminal', text, { kind: 'plugin', name: 'interject' }, false))
+  expect(await row.find({ type: 'Text', text: 'Why?' })).toBeDefined()
+  expect(await row.find({ type: 'Text', text: /kept_reply/ })).toBeUndefined()
+  await row.unmount()
+})
+
+test('a cut from a follow-up on a box inside a side answer still withdraws the rest of that answer', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  world.answers.push('Use the round plate.\n\nIt sits under the tank.', 'The tank.')
+  let submitted = ''
+  let hidden = ''
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('session.append', (_, e, next) => {
+    if (e.door === 'note') hidden += e.message.content.map(b => (b.type === 'text' ? b.text : '')).join('')
+    return next(e)
+  })
+  on('prompt.submit', (_, e) => {
+    submitted = e.text
+    return { text: e.text }
+  })
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Which plate?', 'enter')
+  const drawn = await $.ui.mount(MESSAGE('desktop'))
+  await drawn.unmount()
+  world.selection = { text: 'Use the round plate.', requestId: 'm1' }
+  await interject($, 'desktop', 'Which tank?', 'enter')
+  // Follow up on the inner box, and cut there.
+  const message = await $.ui.mount(MESSAGE('desktop'))
+  const follows = (await message.findAll({ type: 'Button' })).map(b => b.key ?? '').filter(k => k.startsWith('follow-'))
+  // The inner box's buttons come first: it is drawn inside the outer box, above the outer box's own.
+  await message.press({ key: follows[0] ?? '' })
+  await message.unmount()
+  const form = await $.ui.mount(MESSAGE('desktop'))
+  await form.input({ key: 'question', text: 'Why that one?', kind: 'change' })
+  await form.press({ key: 'cut' })
+  await form.unmount()
+  await $.turn.start({ text: submitted, turnId: 't2' })
+  expect(submitted).toBe('✂ Cut and continue: Why that one?')
+  expect(hidden).toContain('the rest of it is withdrawn too')
+})
+
+function noteLog(on: Parameters<Parameters<typeof test>[1]>[1]) {
+  const notes: string[] = []
+  on('session.append', (_, e, next) => {
+    if (e.door === 'note') notes.push(e.message.content.map(b => (b.type === 'text' ? b.text : '')).join(''))
+    return next(e)
+  })
+  return notes
+}
+
+test('a mod that rewrites the cut message: the note still goes with the cut, and never with a typed message', async ($, on) => {
+  const { world } = engine(on, 'terminal')
+  world.selection = { text: LINE, requestId: 'm1' }
+  const notes = noteLog(on)
+  // The engine beneath: the turn starts with the text as settled.
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  // Another mod below interject prefixes every prompt; then the turn starts with the settled text.
+  on('prompt.submit', async (_, e) => {
+    const text = e.origin.kind === 'plugin' ? '[ticket 42] ' + e.text : e.text
+    await $.turn.start({ text, turnId: 'turn-' + text.length })
+    return { text }
+  })
+  await begin($, 'terminal')
+  await interject($, 'terminal', 'Why turn it?', 'cut')
+  const afterCut = notes.length
+  await $.prompt.submit({ text: '✂ Cut and continue: what I typed myself', wait: false, origin: { kind: 'composer' } })
+  expect({ afterCut, afterTyped: notes.length }).toEqual({ afterCut: 1, afterTyped: 1 })
+})
+
+test('a reply that holds the marker text, sent with a waiting cut: the row splits at the mod\'s own marker', async ($, on) => {
+  const MARKED = 'Intro line.\n\n[interject: 9 boxes attached to this message]\nThen the feeder turns the plate.\n\nLast line.'
+  const { world } = engine(on, 'terminal')
+  world.selection = { text: LINE, requestId: 'mk' }
+  on('prompt.fill', () => ({ isFilled: true }))
+  let sent = ''
+  on('prompt.submit', (_, e) => {
+    if (e.text.startsWith('✂ Cut and continue')) return { drop: 'stopped' }
+    sent = e.text
+    return { text: e.text }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const r = await $.ui.mount(ROW('terminal', 'mk', MARKED))
+  await r.unmount()
+  await interject($, 'terminal', 'Why turn it?', 'cut')
+  await $.prompt.submit({ text: 'Why turn it?', wait: false, origin: { kind: 'composer' } })
+  expect(sent).toContain('9 boxes attached')
+  const row = await $.ui.mount(USER('terminal', sent, { kind: 'composer' }, false))
+  const own = String((await row.find({ type: 'Text', text: /engine:/ }))?.text ?? '')
+  const line = String((await row.find({ type: 'Text', text: /^📎 Sent with/ }))?.text ?? '')
+  await row.unmount()
+  expect({ own, line }).toEqual({ own: 'engine: Why turn it?', line: '📎 Sent with 1 box' })
+})
+
+test('a refused note: show what was sent says Claude got only the question', async ($, on) => {
+  const { world } = engine(on, 'terminal')
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('session.append', (_, e, next) => (e.door === 'note' ? ({ deny: 'policy' } as never) : next(e)))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('prompt.submit', async (_, e) => {
+    await $.turn.start({ text: e.text, turnId: 't9' })
+    return { text: e.text }
+  })
+  await begin($, 'terminal')
+  await interject($, 'terminal', 'Why turn it?', 'cut')
+  const message = await $.ui.mount(MESSAGE('terminal'))
+  await message.press({ key: await firstKey(message, 'sent-') })
+  const shown = await message.find({ type: 'Text', text: /kept_reply/ })
+  await message.unmount()
+  expect(shown).toBeUndefined()
+})
+
+test('a box sent mid-turn leaves the 📎 line of the earlier send alone', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Which plate?', 'queue')
+  await $.turn.start({ text: 'go on', turnId: 't2' })
+  // Sent at idle a moment before: its turn t2 has started, no row yet.
+  await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } } as never)
+  // While t2 runs, the person queues another note and types again.
+  world.selection = { text: LINE, requestId: 'm1' }
+  await interject($, 'desktop', 'And the tank?', 'queue')
+  await $.prompt.submit({ text: 'also', wait: false, origin: { kind: 'composer' }, turnId: 't2' } as never)
+  const answer = await $.ui.mount(ANSWER('desktop'))
+  const line = await answer.find({ type: 'Text', text: /^📎 Your message went/ })
+  await answer.unmount()
+  expect(line).toBeDefined()
+})
+
+test('a cut question typed on two lines: the row shows both lines', async ($, on) => {
+  const { world } = engine(on, 'terminal')
+  await begin($, 'terminal')
+  const row = await $.ui.mount(USER('terminal', '✂ Cut and continue: why?\nand how?', { kind: 'plugin', name: 'interject' }, false))
+  const all = (await row.findAll({ type: 'Text' })).map(t => String(t.text)).join(' | ')
+  await row.unmount()
+  expect(all).toContain('and how?')
+})
+
+test('a send at idle: its answer takes the 📎 line', async ($, on) => {
+  const { world } = engine(on, 'desktop')
+  world.selection = { text: LINE, requestId: 'm1' }
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await begin($, 'desktop')
+  await interject($, 'desktop', 'Which plate?', 'queue')
+  await $.turn.start({ text: 'go on', turnId: 't2' })
+  await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } } as never)
+  const answer = await $.ui.mount(ANSWER('desktop'))
+  const line = await answer.find({ type: 'Text', text: /^📎 Your message went/ })
+  await answer.unmount()
+  expect(line).toBeDefined()
 })

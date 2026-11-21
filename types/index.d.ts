@@ -5,6 +5,8 @@ export type InterjectNote = {
   requestId?: string
   /** The line the person picked: a source line of the reply or answer, or what they selected. */
   quote: string
+  /** The text the person selected with the mouse, as drawn: absent when they picked the line from the list. */
+  selected?: string
   /** What the person typed. */
   question: string
   /**
@@ -26,6 +28,10 @@ export type InterjectNote = {
   parent?: string
   /** A side answer the person chose to keep: attached to the next message, then sent. */
   keep?: 'queued' | 'sent'
+  /** Older boxes only: their own copy of what was sent. Newer boxes name the send instead (sentId). */
+  sent?: string
+  /** The send this box went with: what was sent is saved once for all its boxes, apart from them. */
+  sentId?: string
   /** A cut waiting for Enter: the instructions that go with the person's message. */
   pending?: string
   /** A side chat's agent: a fork of the conversation that can use tools, as `$.agent.spawn` answered it. */
@@ -59,10 +65,27 @@ export type InterjectDraft = {
   /** The lines offered while picking. */
   lines: string[]
   quote: string
+  /** The text the person selected with the mouse, as drawn: absent when they picked the line from the list. */
+  selected?: string
   /** A line of this note's answer. */
   on?: string
   /** A follow-up on this side question. */
   parent?: string
+}
+
+/**
+ * What went with one message the person sent (or a cut): the text itself is
+ * saved apart, in <session>/sent/<id>.txt.
+ */
+export type InterjectSend = {
+  /** "<session id>/<id>": the session whose folder holds the text. */
+  id: string
+  /** How many boxes went with the message. */
+  boxes: number
+  /** The first row of Claude's answer to it, which shows the 📎 line. */
+  row?: string
+  /** A cut's message: its instructions went with it. */
+  cut?: true
 }
 
 /** What the person has selected with the mouse, while it is in a reply. */
@@ -74,6 +97,9 @@ declare module 'claude-code' {
       notes: Shaped<InterjectNote[]>
       draft: Shaped<InterjectDraft | null>
       picked: InterjectPicked | null
+      preview: string | null
+      full: string[]
+      sends: InterjectSend[]
     }
   }
 }

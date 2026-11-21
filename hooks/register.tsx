@@ -29,10 +29,22 @@
 import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, Register, RenderElement, RenderSurface } from 'claude-code'
 
-import type { InterjectDraft, InterjectNote, InterjectPicked } from '../types'
+import type { InterjectDraft, InterjectNote, InterjectPicked, InterjectSend } from '../types'
 
 const PANE = 'interject'
-const MARK = '[interject: cut and continue]'
+// A cut's message: this, then the question. What Claude needs to continue
+// goes with it as a note Claude reads and the person doesn't see, added
+// ($.session.append) as the turn that the message starts begins, so the
+// person's row stays one line, and a cut that is not sent leaves no note.
+const CUT_HEAD = '✂ Cut and continue: '
+// How a cut's message began before: still drawn folded in sessions from then.
+const OLD_CUT_MARK = '[interject: cut and continue]'
+// A cut's message that holds its instructions (from before they went
+// unseen, or when they could not): they start on this line.
+const CUT_BODY = '\nI stopped reading your reply at this line:'
+// What goes with the person's message is added to it under this line, so their
+// message holds everything Claude got; their row draws it folded.
+const ATTACHED = /\n\n\[interject: (\d+) box(?:es)? attached to this message\]\n/
 // The desktop app's tool that starts a session: a side chat forked out is one.
 const START_SESSION = 'mcp__ccd_session__start_session'
 const MAX_DEPTH = 4
@@ -46,6 +58,15 @@ const draft = atom({ plugin: 'interject', key: 'draft' } as const, null as Inter
   shape: 'draft-5',
 })
 const picked = atom({ plugin: 'interject', key: 'picked' } as const, null as InterjectPicked | null)
+// What went with each message the person sent: the text itself is saved once,
+// in a file of its own (sentText), so it takes nothing from the boxes' room.
+// `row` is the first row of Claude's answer, which shows a 📎 line for it.
+const sends = atom({ plugin: 'interject', key: 'sends' } as const, [] as InterjectSend[])
+// The message rows drawn in full, by row id: the rest are drawn folded.
+const fullRows = atom({ plugin: 'interject', key: 'full' } as const, [] as string[])
+// The reply row that shows the whole text going with the next message, while
+// it is open: the latest reply when the person asked for it.
+const preview = atom({ plugin: 'interject', key: 'preview' } as const, null as string | null)
 
 // Module memory: starts empty after a reload.
 // The text of each reply block drawn so far, by its transcript id.
@@ -54,6 +75,21 @@ const seen = new Map<string, string>()
 let running: string | undefined
 // A cut made while Claude was writing: the line where the stored reply ends.
 let pendingCut: { quote: string; turnId: string } | undefined
+// A cut's message on its way, and its instructions. This mod's own
+// prompt.submit hook adds them to it unseen, as context; if that hook doesn't
+// hear it, the turn it starts adds them as a note (turn.start). `refused`:
+// the note was refused, so Claude has only the question.
+let cutNote: { context: string } | undefined
+let cutRefused = false
+let cutSentId: string | undefined
+// A send whose answer has not started yet: the first new reply row drawn
+// during its turn takes its 📎 line. `turnId` is that turn, once it started.
+let awaiting: { send: InterjectSend; turnId?: string } | undefined
+// Reply rows that took a send's 📎 line while drawn, not yet written to `sends`
+// (drawing only reads): the clock writes them.
+const claims = new Map<string, string>()
+// The text of each send read so far, by send id.
+const sentTexts = new Map<string, string>()
 // The selection last shown on the band, so it is drawn once per selection.
 let shownSelection = ''
 // Side chats: each one's current turn, so dismissing it can stop it; answers
@@ -189,7 +225,23 @@ function anchorsIn(text: string, list: InterjectNote[]): Anchor[] {
     const end = endOfQuote(text, n.quote)
     byEnd.set(end, [...(byEnd.get(end) ?? []), n])
   }
-  return [...byEnd.entries()].sort((a, b) => a[0] - b[0]).map(([end, notes]) => ({ end, notes }))
+  return [...byEnd.entries()].sort((a, b) => a[0] - b[0]).map(([end, notes]) => ({ end, notes: threadOrder(notes) }))
+}
+
+/**
+ * Boxes at one line in thread order: each box, then its follow-ups (and
+ * theirs), the newest first, so a new follow-up sits right under the box it
+ * follows, where its form was.
+ */
+function threadOrder(notes: InterjectNote[]): InterjectNote[] {
+  const here = new Set(notes.map(n => n.id))
+  const out: InterjectNote[] = []
+  const visit = (n: InterjectNote) => {
+    out.push(n)
+    for (const f of [...notes].reverse()) if (f.parent === n.id) visit(f)
+  }
+  for (const n of notes) if (n.parent === undefined || !here.has(n.parent)) visit(n)
+  return out
 }
 
 /** The anchors with the open form at `end`, after the boxes already there. */
@@ -257,6 +309,44 @@ function clip(s: string, n: number): string {
   return one.length > n ? one.slice(0, Math.max(1, n - 1)) + '…' : one
 }
 
+/**
+ * Opens (or, with `toggle`, closes again) the text that goes with the next
+ * message, at the end of the latest reply. False when no reply row is known.
+ */
+async function showGoes($: EngineInterface, toggle: boolean): Promise<boolean> {
+  const open = await read($, preview)
+  if (toggle && typeof open === 'string') {
+    await update($, preview, () => null)
+    return true
+  }
+  const row = lastRowOf(await replyAt($, 0))
+  if (row === undefined) return false
+  await update($, preview, () => row)
+  return true
+}
+
+/** The band's line for what goes with the next message. */
+function goesSummary(boxes: number): string {
+  return '📎 ' + boxes + (boxes === 1 ? ' box goes' : ' boxes go') + ' with your next message'
+}
+
+/** The person's message with what goes with it added under it. */
+function withAttached(typed: string, boxes: number, attached: string[]): string {
+  // A marker inside what is attached (a reply that quotes one) is changed a
+  // little, so the mod's own marker is always the last one.
+  const safe = attached.map(a => a.replace(/\[interject: (\d+ box(?:es)? attached)/g, '[interject : $1'))
+  return typed + '\n\n[interject: ' + boxes + (boxes === 1 ? ' box' : ' boxes') + ' attached to this message]\n' + safe.join('\n\n')
+}
+
+/** A message split into what the person typed and what the mod added to it; undefined when nothing was. */
+function splitAttached(text: string): { typed: string; boxes: number; attached: string } | undefined {
+  // The last marker: the mod adds its own at the end, after anything pasted.
+  let m: RegExpExecArray | null = null
+  for (const found of text.matchAll(new RegExp(ATTACHED.source, 'g'))) m = found as RegExpExecArray
+  if (m === null) return undefined
+  return { typed: text.slice(0, m.index), boxes: Number(m[1]), attached: text.slice(m.index + m[0].length) }
+}
+
 /** The text up to and including the line (the last 6,000 characters of it). */
 function upTo(text: string, quote: string): string {
   const cut = text.slice(0, endOfQuote(text, quote))
@@ -281,12 +371,20 @@ function chainOf(list: InterjectNote[], from: string | undefined): InterjectNote
   return chain
 }
 
-/** The earlier exchanges, as Claude reads them. */
-function chainText(chain: InterjectNote[]): string[] {
+/**
+ * The earlier exchanges, as Claude reads them. A follow-up names the question
+ * it follows instead of quoting the same line again; a box inside a side
+ * answer names that answer's question, then quotes its line of it.
+ */
+function chainText(chain: InterjectNote[], all: InterjectNote[] = chain): string[] {
   if (chain.length === 0) return []
   const lines = ['Earlier interjections in this thread, oldest first:']
+  const questionOf = (id: string) => '"' + (all.find(m => m.id === id)?.question ?? chain.find(m => m.id === id)?.question ?? 'an earlier question') + '"'
   for (const n of chain) {
-    lines.push('', 'At this line:', quoted(n.quote), 'The user asked: ' + n.question)
+    if (n.parent !== undefined) lines.push('', 'Following up on ' + questionOf(n.parent) + ':')
+    else if (n.on !== undefined) lines.push('', 'In your side answer to ' + questionOf(n.on) + ', at this line:', quoted(n.quote))
+    else lines.push('', 'At this line:', quoted(n.quote))
+    lines.push('The user asked: ' + n.question)
     if (n.answer !== undefined) lines.push('You answered on the side:', quoted(n.answer))
   }
   return lines
@@ -297,7 +395,7 @@ function rootQuote(chain: InterjectNote[], quote: string): string {
   return chain[0]?.quote ?? quote
 }
 
-function sidePrompt(main: string, chain: InterjectNote[], quote: string, question: string): string {
+function sidePrompt(main: string, chain: InterjectNote[], quote: string, question: string, followUp = false): string {
   return [
     'This is a side chat. The user stopped reading your reply at one line to ask something on the side. Your answer is shown to them in a box at that line and is not added to the main conversation. Use tools as the question needs (read files, run commands, search the web); do what the question asks and no more, and end with your answer to it.',
     '',
@@ -308,16 +406,29 @@ function sidePrompt(main: string, chain: InterjectNote[], quote: string, questio
     '',
     ...chainText(chain),
     '',
-    chain.length > 0 ? 'Now, at this line of your last side answer:' : 'The line the user is asking about:',
+    followUp
+      ? 'Now they follow up on the last of those questions, about the same line:'
+      : chain.length > 0
+        ? 'Now, at this line of your last side answer:'
+        : 'The line the user is asking about:',
     quoted(quote),
     'Their question: ' + question,
   ].join('\n')
 }
 
-function queueContext(list: InterjectNote[], n: InterjectNote): string {
+/**
+ * A note added to the next message, with the exchanges it builds on. Those in
+ * `above` are already in the same message: named, not repeated.
+ */
+function queueContext(list: InterjectNote[], n: InterjectNote, above: ReadonlySet<string> = new Set()): string {
+  const chain = chainOf(list, n.parent ?? n.on)
+  const shared = chain.filter(m => above.has(m.id))
   return [
     'While reading your earlier reply, the user interjected.',
-    ...chainText(chainOf(list, n.parent ?? n.on)),
+    ...(shared.length > 0
+      ? ['It builds on ' + (shared.length === 1 ? 'an exchange' : 'exchanges') + ' given above: ' + shared.map(m => '"' + m.question + '"').join(', ') + '.']
+      : []),
+    ...chainText(chain.filter(m => !above.has(m.id)), list),
     '',
     'At this line:',
     quoted(n.quote),
@@ -340,12 +451,42 @@ function keptContext(list: InterjectNote[], kept: InterjectNote[]): string {
       exchanges.push(m)
     }
   }
-  const lines = chainText(exchanges)
+  const lines = chainText(exchanges, list)
   lines[0] = 'The exchanges they kept, each after the ones it builds on:'
   return [
     'While reading your earlier reply, the user asked side questions. They chose to keep these exchanges: take them into account.',
     ...lines,
   ].join('\n')
+}
+
+/**
+ * What goes with the person's next message: the cuts waiting to be sent, the
+ * notes added to it, and the kept boxes (with the boxes they build on), each
+ * as the text Claude reads. `boxes` counts the boxes that text covers.
+ */
+function attachments(list: InterjectNote[]): {
+  queued: InterjectNote[]
+  kept: InterjectNote[]
+  waiting: InterjectNote[]
+  context: string[]
+  boxes: number
+} {
+  const queued = list.filter(n => n.mode === 'queue' && n.status === 'queued')
+  const kept = list.filter(n => n.keep === 'queued')
+  const waiting = list.filter(n => n.mode === 'cut' && n.status === 'waiting')
+  const along = new Set(kept.flatMap(n => chainOf(list, n.id).map(m => m.id)))
+  // Each exchange goes once in the message: the kept ones first, then each
+  // note, naming the exchanges given above it instead of repeating them.
+  const above = new Set(along)
+  const notesText = queued.map(n => {
+    const text = queueContext(list, n, above)
+    for (const m of chainOf(list, n.parent ?? n.on)) above.add(m.id)
+    return text
+  })
+  const context = [...waiting.map(n => n.pending ?? ''), ...(kept.length > 0 ? [keptContext(list, kept)] : []), ...notesText].filter(
+    c => c !== '',
+  )
+  return { queued, kept, waiting, context, boxes: queued.length + waiting.length + along.size }
 }
 
 /**
@@ -364,7 +505,7 @@ function keptAlong(list: InterjectNote[]): Map<string, 'queued' | 'sent'> {
 }
 
 /** What Claude reads to cut its reply at a line and continue from the interjection. */
-function cutInstructions(main: string, chain: InterjectNote[], quote: string): string {
+function cutInstructions(main: string, chain: InterjectNote[], quote: string, followUp = false): string {
   const root = rootQuote(chain, quote)
   return [
     'I stopped reading your reply at this line:',
@@ -374,16 +515,19 @@ function cutInstructions(main: string, chain: InterjectNote[], quote: string): s
     '<kept_reply>',
     upTo(main, root),
     '</kept_reply>',
-    ...(chain.length > 0
+    ...(chain.length > 0 && followUp ? ['', ...chainText(chain), '', 'My interjection follows up on the last of those questions.'] : []),
+    ...(chain.length > 0 && !followUp
       ? ['', ...chainText(chain), '', 'I stopped reading your last side answer at this line; the rest of it is withdrawn too:', quoted(quote)]
       : []),
   ].join('\n')
 }
 
-function cutPrompt(main: string, chain: InterjectNote[], quote: string, question: string): string {
+/** The note that goes unseen with a cut's message: the instructions to continue from the line. */
+function cutContext(main: string, chain: InterjectNote[], quote: string, question: string, followUp = false): string {
   return [
-    MARK,
-    cutInstructions(main, chain, quote),
+    'The user is cutting your reply short with the interject mod: their message is "' + CUT_HEAD + question + '". In their words:',
+    '',
+    cutInstructions(main, chain, quote, followUp),
     '',
     'My interjection: ' + question,
     '',
@@ -414,7 +558,13 @@ async function replyAt($: EngineInterface, back: number): Promise<string> {
  * selection matches no line.
  */
 function draftFor(list: InterjectNote[], selection: InterjectPicked, latest: string): InterjectDraft | undefined {
-  const blank: Pick<InterjectDraft, 'stage' | 'back' | 'lines'> = { stage: 'type', back: 0, lines: [] }
+  const chosen = selection.text.replace(/\s+/g, ' ').trim()
+  const blank: Pick<InterjectDraft, 'stage' | 'back' | 'lines' | 'selected'> = {
+    stage: 'type',
+    back: 0,
+    lines: [],
+    ...(chosen === '' ? {} : { selected: chosen }),
+  }
   const fromRow = selection.requestId === undefined ? undefined : seen.get(selection.requestId)
   let requestId = selection.requestId
   let main = fromRow
@@ -560,6 +710,96 @@ function saveBoxes($: EngineInterface, id: string, list: InterjectNote[]): Promi
   return saving
 }
 
+// ---------------------------------------------------------------------------
+// Sends: what went with each message, kept apart from the boxes. A send's id
+// is "<session id>/<id>", so a session that takes over another's boxes still
+// finds their sends. The texts are files <session>/sent/<id>.txt; the list of
+// sends (small) is <session>/sends.json.
+
+const SENDS_KEPT = 2000
+
+function sentPath(dir: string, id: string): string {
+  const [session, own] = id.split('/')
+  return dir + '/' + session + '/sent/' + own + '.txt'
+}
+
+/** The text that went with send `id`, or undefined when it can't be read. */
+async function sentText($: EngineInterface, id: string): Promise<string | undefined> {
+  const known = sentTexts.get(id)
+  if (known !== undefined) return known
+  try {
+    const text = String(await $.fs.read(sentPath(await boxesDir($), id)))
+    sentTexts.set(id, text)
+    return text
+  } catch {
+    return undefined
+  }
+}
+
+async function loadSends($: EngineInterface, session: string): Promise<InterjectSend[]> {
+  const path = (await boxesDir($)) + '/' + session + '/sends.json'
+  if (!(await $.fs.exists(path))) return []
+  try {
+    const list = JSON.parse(String(await $.fs.read(path)))
+    return Array.isArray(list) ? (list as InterjectSend[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** Changes the list of sends, and saves it for this session. */
+async function setSends($: EngineInterface, change: (list: InterjectSend[]) => InterjectSend[]): Promise<void> {
+  await followSession($)
+  const session = current ?? (await $.session.id())
+  let changed: InterjectSend[] = []
+  await update($, sends, list => (changed = change(list).slice(-SENDS_KEPT)))
+  await $.fs.write((await boxesDir($)) + '/' + session + '/sends.json', JSON.stringify(changed))
+}
+
+/**
+ * Saves `text` as what went with a message just sent, once, and returns its id.
+ * The next new reply row shows a 📎 line for it.
+ */
+async function recordSend(
+  $: EngineInterface,
+  text: string,
+  boxes: number,
+  cut = false,
+  line = true,
+  stopped?: string,
+): Promise<string> {
+  const session = current ?? (await $.session.id())
+  const id = session + '/' + (await newId($))
+  sentTexts.set(id, text)
+  const send: InterjectSend = cut ? { id, boxes, cut: true } : { id, boxes }
+  // Set before the writes, so a reply row drawn meanwhile can take the line.
+  // Typed while Claude was working: it reaches the reply already running, so
+  // no row of a new answer is its own (its boxes still show what was sent),
+  // and an earlier send still waiting keeps its claim. `stopped`: the turn a
+  // cut stopped, still ending; the cut's answer is the turn after it.
+  if (line) awaiting = { send, turnId: running !== stopped ? running : undefined }
+  try {
+    await $.fs.write(sentPath(await boxesDir($), id), text)
+    await setSends($, list => [...list, send])
+  } catch (err) {
+    $.ui.toast('Interject could not save what was sent: ' + clip(String(err), 120))
+  }
+  return id
+}
+
+/** Writes the 📎 lines that reply rows took while drawn. */
+async function saveClaims($: EngineInterface): Promise<void> {
+  if (claims.size === 0) return
+  const taken = new Map(claims)
+  claims.clear()
+  await setSends($, list =>
+    list.map(m => {
+      const row = [...taken].find(([, id]) => id === m.id)?.[0]
+      return row === undefined ? m : { ...m, row }
+    }),
+  )
+}
+
 // A session can go on under a new id: Desktop resumes one that way, and a fork
 // is one. Its replies keep their ids, so an index of which session holds the
 // boxes of each reply lets the new session take them over when it draws one.
@@ -613,6 +853,13 @@ async function indexReplies($: EngineInterface, id: string, list: InterjectNote[
 
 /** Takes over the boxes of session `from`, which this one continues. */
 async function adopt($: EngineInterface, from: string): Promise<void> {
+  const theirSends = await loadSends($, from)
+  if (theirSends.length > 0) {
+    await setSends($, list => {
+      const have = new Set(list.map(m => m.id))
+      return [...theirSends.filter(m => !have.has(m.id)), ...list]
+    })
+  }
   const theirs = await loadBoxes($, from).catch((): InterjectNote[] => [])
   if (theirs.length === 0) return
   await setNotes($, list => {
@@ -676,6 +923,9 @@ async function setNotes($: EngineInterface, change: (list: InterjectNote[]) => I
     return fitted.list
   })
   if (dropped > 0) $.ui.toast(fullNotice(dropped))
+  // Nothing left to go with the next message: the preview closes, so it
+  // doesn't open again by itself when something is added later.
+  if (attachments(changed).context.length === 0 && (await read($, preview)) !== null) await update($, preview, () => null)
   await saveBoxes($, current ?? (await $.session.id()), changed)
 }
 
@@ -697,6 +947,12 @@ async function loadSession($: EngineInterface, id: string, replace: boolean): Pr
   indexed.clear()
   adopted.clear()
   carried = undefined
+  awaiting = undefined
+  claims.clear()
+  cutNote = undefined
+  if (replace) await update($, preview, () => null)
+  const savedSends = await loadSends($, id)
+  if (replace || savedSends.length > 0) await update($, sends, () => savedSends)
   const saved = await loadBoxes($, id).catch((): InterjectNote[] => [])
   if (saved.length > 0) {
     if (replace || (await read($, notes)).length === 0) {
@@ -902,6 +1158,7 @@ async function followUp($: EngineInterface, n: InterjectNote, main: string, surf
       back: 0,
       lines: [],
       quote: n.quote,
+      selected: n.selected,
       on: n.on,
       parent: n.id,
     },
@@ -939,6 +1196,7 @@ async function askAside($: EngineInterface, typed: string, tools = true): Promis
     id,
     requestId: d.requestId,
     quote: d.quote,
+    selected: d.selected,
     question,
     mode: 'side',
     status: 'thinking',
@@ -947,7 +1205,7 @@ async function askAside($: EngineInterface, typed: string, tools = true): Promis
   }
   await setNotes($, list => [...list, note])
   await closeForm($)
-  const prompt = sidePrompt(d.main, chain, d.quote, question)
+  const prompt = sidePrompt(d.main, chain, d.quote, question, d.parent !== undefined)
   if (tools) await runAgent($, id, prompt, question)
   else await answerWithoutTools($, id, prompt)
 }
@@ -962,7 +1220,7 @@ async function withTools($: EngineInterface, n: InterjectNote, main: string): Pr
         : m,
     ),
   )
-  await runAgent($, n.id, sidePrompt(main, chain, n.quote, n.question), n.question)
+  await runAgent($, n.id, sidePrompt(main, chain, n.quote, n.question, n.parent !== undefined), n.question)
 }
 
 /** Starts the side chat's agent for box `id`: a fork, the whole conversation and its tools, in the background. */
@@ -1298,6 +1556,7 @@ async function addToNext($: EngineInterface): Promise<void> {
     id,
     requestId: d.requestId,
     quote: d.quote,
+    selected: d.selected,
     question,
     mode: 'queue',
     status: 'queued',
@@ -1322,6 +1581,7 @@ async function cutHere($: EngineInterface): Promise<void> {
     id,
     requestId: d.requestId,
     quote: d.quote,
+    selected: d.selected,
     question,
     mode: 'cut',
     status: 'continuing',
@@ -1342,11 +1602,31 @@ async function cutHere($: EngineInterface): Promise<void> {
     }
   }
 
-  const sent = await $.prompt.submit({ text: cutPrompt(d.main, chain, d.quote, question), asUser: true })
-  if (sent.drop !== undefined) {
-    // Not sent (for one, the person stopped Claude themselves): the person sends it.
+  const text = CUT_HEAD + question
+  // A follow-up at the top level: no side answer of its is withdrawn.
+  const followUp = d.parent !== undefined && d.on === undefined
+  const context = cutContext(d.main, chain, d.quote, question, followUp)
+  cutNote = { context }
+  cutRefused = false
+  cutSentId = undefined
+  let sent: Awaited<ReturnType<typeof $.prompt.submit>>
+  try {
+    sent = await $.prompt.submit({ text, asUser: true })
+  } catch (err) {
+    cutNote = undefined
+    throw err
+  }
+  if (sent.drop === undefined) {
+    // What Claude got: the instructions too, unless the note was refused.
+    const sentId = await recordSend($, cutRefused ? text : context + '\n\n' + text, 1, true, true, turnId)
+    cutSentId = sentId
+    await setNotes($, list => list.map((n): InterjectNote => (n.id === id ? { ...n, sentId } : n)))
+  } else {
+    // Not sent (for one, the person stopped Claude themselves): no turn
+    // started, so no note was added. The person sends it.
+    cutNote = undefined
     const pending =
-      cutInstructions(d.main, chain, d.quote) +
+      cutInstructions(d.main, chain, d.quote, followUp) +
       '\n\nAnswer my interjection (my message), then continue your reply from that line, taking it into account.'
     await setNotes($, list => list.map((n): InterjectNote => (n.id === id ? { ...n, status: 'waiting', pending } : n)))
     await $.prompt.fill({ text: question })
@@ -1355,6 +1635,28 @@ async function cutHere($: EngineInterface): Promise<void> {
 }
 
 type FormElements = Pick<Elements['desktop'], 'Box' | 'Text' | 'Button' | 'Input'>
+
+/** The box with the exact text that goes with the next message, and a button to close it. */
+function goesTree(
+  $: EngineInterface,
+  { Box, Text, Button }: Pick<FormElements, 'Box' | 'Text' | 'Button'>,
+  summary: string,
+  context: string[],
+): RenderElement {
+  return (
+    <Box flexDirection="column" minWidth={0} borderStyle="round" borderColor="warning" paddingX={1}>
+      <Text color="warning" weight="semibold">
+        {summary + '. Claude gets this text with it:'}
+      </Text>
+      <Text dimColor size="caption">
+        {context.join('\n\n')}
+      </Text>
+      <Box flexDirection="row">
+        <Button key="interject-preview-hide" plain dimColor label="hide" onPress={() => update($, preview, () => null)} />
+      </Box>
+    </Box>
+  )
+}
 
 /**
  * The field and the choices, each on its own full-width row. In the panel the
@@ -1482,6 +1784,7 @@ export const register: Register = on => {
     let emptyChecks = 0
     $.clock.every(400, async () => {
       await followSession($)
+      await saveClaims($).catch(() => {})
       const selection = await $.ui.selection()
       const text = selection?.text.trim() ?? ''
       if (text === '') {
@@ -1498,15 +1801,37 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('turn.start', ($, e, next) => {
-    if (e.agentId === undefined) running = e.turnId
-    else agentTurns.set(e.agentId, e.turnId)
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      running = e.turnId
+      // A send's answer: this turn.
+      if (awaiting !== undefined && awaiting.turnId === undefined) awaiting.turnId = e.turnId
+      // A cut's message starts this turn: its note goes with the turn's first request.
+      // (Only when this mod's prompt.submit hook didn't add them already.)
+      const note = cutNote
+      if (note !== undefined && e.text.includes(CUT_HEAD.trim())) {
+        cutNote = undefined
+        const added = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note.context }] } })
+        if ('deny' in added) {
+          cutRefused = true
+          $.ui.toast('Interject could not give Claude the cut\'s instructions (' + clip(String(added.deny), 80) + '): Claude only has your interjection.')
+          // Already recorded as sent with them: what was sent is the question alone.
+          if (cutSentId !== undefined) {
+            const only = e.text
+            sentTexts.set(cutSentId, only)
+            await $.fs.write(sentPath(await boxesDir($), cutSentId), only).catch(() => {})
+          }
+        }
+      }
+    } else agentTurns.set(e.agentId, e.turnId)
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
       if (e.turnId === running) running = undefined
+      // Its turn ended without drawing a row: no later answer takes its 📎 line.
+      if (awaiting?.turnId === e.turnId) awaiting = undefined
       if (pendingCut !== undefined && pendingCut.turnId !== e.turnId) pendingCut = undefined
     } else {
       await sideFinished($, e.agentId, e)
@@ -1554,6 +1879,18 @@ export const register: Register = on => {
       await forkOut($, last)
       return { text: 'Forking the last side chat: its box says how it goes.' }
     }
+    if (arg === 'next') {
+      // Shown in the band and a notice, not as the command's output: that
+      // output is sent to Claude, and the boxes would go twice.
+      const goes = attachments(await read($, notes))
+      if (goes.context.length === 0) {
+        $.ui.toast('Nothing goes with your next message.')
+        return {}
+      }
+      const shown = await showGoes($, false)
+      $.ui.toast(goesSummary(goes.boxes) + (shown ? ': the text is at the end of the latest reply.' : '.'))
+      return {}
+    }
     if (arg === 'clear') {
       await setNotes($, () => [])
       return { text: 'Removed every interjection box.' }
@@ -1576,14 +1913,36 @@ export const register: Register = on => {
   // The band above the prompt: while a line is selected, a button to interject there.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const selection = await read($, picked)
-    if (selection === null || e.props.hasSurvey) return next(e)
+    if (e.props.hasSurvey) return next(e)
+    const goes = attachments(await read($, notes))
+    if (selection === null && goes.context.length === 0) return next(e)
+    // One row only: Desktop gives the band the height of one row with the ✎
+    // button and draws a second row over it. The full text opens in the reply.
+    const open = typeof (await read($, preview)) === 'string'
     const { Box, Text, Button } = $.ui.resolve(e)
     const theirs = await next(e)
+    const goesLabel = goes.context.length > 0 ? goesSummary(goes.boxes) + (open ? ' · hide' : ' · show') : ''
     return (
       <Box flexDirection="column">
-        <Box flexDirection="row" gap={1}>
-          <Button key="interject-here" variant="primary" label="✎ Interject here" onPress={press => start($, press.surface)} />
-          <Text dimColor>{clip(selection.text, Math.max(10, e.props.bodyColumns - 22))}</Text>
+        <Box flexDirection="row" gap={2}>
+          {selection !== null && (
+            <Button key="interject-here" variant="primary" label="✎ Interject here" onPress={press => start($, press.surface)} />
+          )}
+          {goesLabel !== '' && e.surface === 'mobile' && <Text dimColor>{goesSummary(goes.boxes)}</Text>}
+          {goesLabel !== '' && e.surface !== 'mobile' && (
+            <Button
+              key="interject-preview"
+              plain
+              dimColor
+              label={goesLabel}
+              onPress={async () => {
+                if (!(await showGoes($, true))) $.ui.toast('No reply to show it under yet.')
+              }}
+            />
+          )}
+          {selection !== null && (
+            <Text dimColor>{clip(selection.text, Math.max(10, e.props.bodyColumns - 24 - goesLabel.length))}</Text>
+          )}
         </Box>
         {theirs}
       </Box>
@@ -1616,6 +1975,12 @@ export const register: Register = on => {
   // form being typed is drawn the same way, under its line.
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const text = e.props.text
+    // The first new row of Claude's answer to a message sent with boxes takes
+    // its 📎 line (in memory: the clock writes it).
+    if (awaiting?.turnId !== undefined && awaiting.turnId === running && !seen.has(e.requestId) && !claims.has(e.requestId)) {
+      claims.set(e.requestId, awaiting.send.id)
+      awaiting = undefined
+    }
     seen.set(e.requestId, text)
     // Read first, so a change to the boxes draws this row again, even one
     // drawn before they were loaded.
@@ -1644,10 +2009,70 @@ export const register: Register = on => {
     // interjects on. The list of lines (no line yet) goes at the end of the reply.
     const formEnd = (within: string, answerOf: string | undefined) =>
       formHere !== null && formBox !== undefined && formHere.on === answerOf ? endOfQuote(within, formHere.quote) : undefined
-    if (top.length === 0 && formBox === undefined) return next(e)
+    // The text that goes with the next message, at the end of the latest reply, while open.
+    const goes = (await read($, preview)) === e.requestId && e.surface !== 'mobile' ? attachments(all) : undefined
+    const goesBox =
+      goes === undefined || goes.context.length === 0 ? undefined : goesTree($, $.ui.resolve(e), goesSummary(goes.boxes), goes.context)
+    // A message sent with boxes: a 📎 line at the top of Claude's answer to it,
+    // whose button shows what went with it. Desktop and VS Code: the terminal
+    // shows it on the person's message row.
+    const sentOpen = await read($, fullRows)
+    const claimed = claims.get(e.requestId)
+    const allSends = await read($, sends)
+    const sendHere =
+      e.surface === 'terminal' || e.surface === 'mobile'
+        ? undefined
+        : allSends.find(m => (claimed !== undefined ? m.id === claimed : m.row === e.requestId))
+    // The texts of the sends unfolded in this row: the 📎 line's, and the boxes'.
+    const openTexts = new Map<string, string>()
+    const openIds = [
+      ...(sendHere !== undefined && sentOpen.includes('send-' + sendHere.id) ? [sendHere.id] : []),
+      ...all.filter(n => n.sentId !== undefined && sentOpen.includes(n.id)).map(n => n.sentId ?? ''),
+    ]
+    for (const id of openIds) {
+      const t = await sentText($, id)
+      if (t !== undefined) openTexts.set(id, t)
+    }
+    const toggleOpen = (key: string) => update($, fullRows, rows => (rows.includes(key) ? rows.filter(r => r !== key) : [...rows, key].slice(-50)))
+    if (top.length === 0 && formBox === undefined && goesBox === undefined && sendHere === undefined) return next(e)
 
     const { Box, Text, Button, Markdown } = $.ui.resolve(e)
     const indent = e.surface === 'terminal' ? 2 : 0
+
+    // The 📎 line, and under it, once pressed, what went with the message.
+    let sendLine: RenderElement | undefined
+    if (sendHere !== undefined) {
+      const key = 'send-' + sendHere.id
+      const shown = sentOpen.includes(key) ? openTexts.get(sendHere.id) : undefined
+      const what =
+        sendHere.cut === true
+          ? '📎 Your cut came with instructions for Claude'
+          : '📎 Your message went with ' + sendHere.boxes + (sendHere.boxes === 1 ? ' box' : ' boxes')
+      sendLine = (
+        <Box flexDirection="column" minWidth={0}>
+          <Box flexDirection="row" gap={2}>
+            <Text dimColor size="caption">
+              {what}
+            </Text>
+            <Button key={key} plain dimColor label={shown !== undefined ? '▴ hide' : '▾ show'} onPress={() => toggleOpen(key)} />
+          </Box>
+          {shown !== undefined && (
+            <Text dimColor size="caption">
+              {shown}
+            </Text>
+          )}
+        </Box>
+      )
+    }
+    // Nothing else in this row: the line, then the reply as the engine draws it.
+    if (top.length === 0 && formBox === undefined && goesBox === undefined) {
+      return (
+        <Box flexDirection="column">
+          {sendLine}
+          {await next(e)}
+        </Box>
+      )
+    }
 
     const cutLine = (rest: string, what: string) => {
       const lines = splitUnits(rest).length
@@ -1667,12 +2092,18 @@ export const register: Register = on => {
         for (const { end, notes: here, form: hasForm } of fitTables(n.answer, withForm(anchorsIn(n.answer, inside), formEnd(n.answer, n.id)))) {
           const segment = pieceOf(n.answer, from, end)
           if (segment.trim() !== '') body.push(<Markdown text={segment} />)
+          let formDrawn = false
           for (const m of here) {
             const drawn = drawNote(m, depth + 1)
             body.push(drawn.box)
             isCut = isCut || drawn.isCut
+            // A follow-up's form: right under the box it follows.
+            if (hasForm === true && formBox !== undefined && !isCut && formHere?.parent === m.id) {
+              body.push(formBox)
+              formDrawn = true
+            }
           }
-          if (hasForm === true && formBox !== undefined && !isCut) body.push(formBox)
+          if (hasForm === true && formBox !== undefined && !isCut && !formDrawn) body.push(formBox)
           from = end
           if (isCut) break
         }
@@ -1680,11 +2111,16 @@ export const register: Register = on => {
         if (rest.trim() !== '') body.push(isCut ? cutLine(rest, 'answer') : <Markdown text={pieceOf(n.answer, from)} />)
       }
 
-      const icon = n.mode === 'side' ? '? ' : n.mode === 'queue' ? '+ ' : '✂ '
       const box = (
         <Box flexDirection="column" minWidth={0} borderStyle="round" borderColor="warning" paddingX={1}>
+          {/* The line the box is about, small, then the question; a follow-up names the question it follows. */}
+          <Text dimColor size="caption">
+            {n.parent !== undefined
+              ? '↳ follows up: ' + clip(all.find(m => m.id === n.parent)?.question ?? 'an earlier question', 70)
+              : '“' + clip(n.selected ?? n.quote, 160) + '”'}
+          </Text>
           <Text color="warning" weight="semibold">
-            {icon + n.question}
+            {n.question}
           </Text>
           {n.status === 'thinking' && (
             <Text dimColor>{n.agentId === undefined && n.outside !== true ? 'Thinking…' : 'Working on it on the side…'}</Text>
@@ -1709,6 +2145,11 @@ export const register: Register = on => {
           )}
           {n.noTools !== undefined && <Text dimColor>{n.noTools}</Text>}
           {n.forked !== undefined && <Text dimColor>{n.forked}</Text>}
+          {sentOpen.includes(n.id) && (n.sent ?? openTexts.get(n.sentId ?? '')) !== undefined && (
+            <Text dimColor size="caption">
+              {n.sent ?? openTexts.get(n.sentId ?? '')}
+            </Text>
+          )}
           <Box flexDirection="row" flexWrap="wrap" gap={2}>
             {n.mode === 'side' && n.status === 'answered' && (
               <Button key={'follow-' + n.id} plain dimColor label="follow up" onPress={press => followUp($, n, text, press.surface)} />
@@ -1722,6 +2163,15 @@ export const register: Register = on => {
             {n.mode === 'side' && n.status === 'answered' && n.forked === undefined && e.surface === 'desktop' && (
               <Button key={'fork-' + n.id} plain dimColor label="fork to session" onPress={() => forkOut($, n)} />
             )}
+            {(n.sent !== undefined || n.sentId !== undefined) && (
+              <Button
+                key={'sent-' + n.id}
+                plain
+                dimColor
+                label={sentOpen.includes(n.id) ? '▴ hide what was sent' : '▾ show what was sent'}
+                onPress={() => toggleOpen(n.id)}
+              />
+            )}
             <Button key={'dismiss-' + n.id} plain dimColor label="dismiss" onPress={() => dismiss($, n)} />
           </Box>
         </Box>
@@ -1729,7 +2179,7 @@ export const register: Register = on => {
       return { box, isCut }
     }
 
-    const parts: RenderElement[] = []
+    const parts: RenderElement[] = sendLine === undefined ? [] : [sendLine]
     let from = 0
     let isCut = false
     for (const [i, { end, notes: here, form: hasForm }] of fitTables(text, withForm(anchorsIn(text, top), formEnd(text, undefined))).entries()) {
@@ -1744,6 +2194,12 @@ export const register: Register = on => {
           </Box>,
         )
       }
+      const formBlock = () => (
+        <Box flexDirection="column" marginLeft={indent}>
+          {formBox}
+        </Box>
+      )
+      let formDrawn = false
       for (const n of here) {
         const drawn = drawNote(n, 1)
         parts.push(
@@ -1752,8 +2208,13 @@ export const register: Register = on => {
           </Box>,
         )
         isCut = isCut || drawn.isCut
+        // A follow-up's form: right under the box it follows.
+        if (hasForm === true && formBox !== undefined && !isCut && formHere?.parent === n.id) {
+          parts.push(formBlock())
+          formDrawn = true
+        }
       }
-      if (hasForm === true && formBox !== undefined && !isCut) {
+      if (hasForm === true && formBox !== undefined && !isCut && !formDrawn) {
         parts.push(
           <Box flexDirection="column" marginLeft={indent}>
             {formBox}
@@ -1772,23 +2233,81 @@ export const register: Register = on => {
         </Box>,
       )
     }
+    if (goesBox !== undefined) {
+      parts.push(
+        <Box flexDirection="column" minWidth={0} marginLeft={indent}>
+          {goesBox}
+        </Box>,
+      )
+    }
     // No minWidth here: the engine's own drawing of the first part is a child,
     // and Desktop refuses an engine node under a Box with one.
     return <Box flexDirection="column">{parts}</Box>
   })
 
-  // The message a cut sends for the person: drawn as one short line.
+  // A message that carries more than the person typed, drawn folded with a
+  // button that shows all of it: one with boxes attached, as the person typed
+  // it and a small line; a cut's message with its instructions in it (from
+  // before they went unseen), as one line. Desktop and VS Code draw the
+  // person's messages themselves, so in practice this is the terminal's and
+  // the phone's rows.
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
+    const text = e.props.text
     const origin = e.props.origin
-    if (e.props.isExpanded || origin.kind !== 'plugin' || origin.name !== 'interject' || !e.props.text.startsWith(MARK)) {
-      return next(e)
+    const ours = origin.kind === 'plugin' && origin.name === 'interject'
+    const oldCut = ours && text.startsWith(OLD_CUT_MARK)
+    const longCut = ours && text.startsWith(CUT_HEAD) && text.includes(CUT_BODY)
+    const parts = oldCut || longCut ? undefined : splitAttached(text)
+    if (!oldCut && !longCut && (parts === undefined || parts.typed.trim() === '')) return next(e)
+    // ctrl+o's full transcript shows it all.
+    if (e.props.isExpanded && e.surface === 'terminal') return next(e)
+    const open = (await read($, fullRows)).includes(e.requestId)
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const toggle = (
+      <Button
+        key={'full-' + e.requestId}
+        plain
+        dimColor
+        label={open ? '▴ hide' : '▾ show all that was sent'}
+        onPress={() =>
+          update($, fullRows, rows => (rows.includes(e.requestId) ? rows.filter(r => r !== e.requestId) : [...rows, e.requestId].slice(-50)))
+        }
+      />
+    )
+    if (parts === undefined) {
+      const question = oldCut ? (/^My interjection: (.*)$/m.exec(text)?.[1] ?? '') : text.slice(CUT_HEAD.length, text.indexOf(CUT_BODY)).trim()
+      return (
+        <Box flexDirection="column">
+          <Box flexDirection="row">
+            <Text color="warning">{CUT_HEAD}</Text>
+            <Text>{question}</Text>
+          </Box>
+          <Box flexDirection="row">{toggle}</Box>
+          {open && (
+            <Text dimColor size="caption">
+              {text}
+            </Text>
+          )}
+        </Box>
+      )
     }
-    const question = /^My interjection: (.*)$/m.exec(e.props.text)?.[1] ?? ''
-    const { Box, Text } = $.ui.resolve(e)
+    const { typed, boxes, attached } = parts
+    // The engine draws what the person typed, so the row keeps its own look.
+    const own = await next({ ...e, props: { ...e.props, text: typed } })
     return (
-      <Box>
-        <Text color="warning">{'✂ Cut and continue: '}</Text>
-        <Text>{question}</Text>
+      <Box flexDirection="column">
+        {own}
+        <Box flexDirection="row" gap={2}>
+          <Text dimColor size="caption">
+            {'📎 Sent with ' + boxes + (boxes === 1 ? ' box' : ' boxes')}
+          </Text>
+          {toggle}
+        </Box>
+        {open && (
+          <Text dimColor size="caption">
+            {attached}
+          </Text>
+        )}
       </Box>
     )
   })
@@ -1831,31 +2350,33 @@ export const register: Register = on => {
       }
       return next(e)
     }
+    // A cut's message, sent by this mod: its instructions go with it unseen.
+    if (e.origin.kind === 'plugin' && e.origin.name === 'interject' && cutNote !== undefined && e.text.includes(CUT_HEAD.trim())) {
+      const hidden = cutNote.context
+      cutNote = undefined
+      return next({ ...e, context: [...(e.context ?? []), hidden] })
+    }
     // What the person sent: typed at the terminal (composer), from a phone
     // (bridge), or in the desktop app or VS Code, whose box is the host's (sdk).
     const typed = e.origin.kind === 'composer' || e.origin.kind === 'bridge' || e.origin.kind === 'sdk'
+    // A cut's instructions are never the person's message's.
+    if (typed) cutNote = undefined
     if (e.isMeta === true || e.command !== undefined || !typed) return next(e)
     const list = await read($, notes)
-    const queued = list.filter(n => n.mode === 'queue' && n.status === 'queued')
-    const kept = list.filter(n => n.keep === 'queued')
-    const waiting = list.filter(n => n.mode === 'cut' && n.status === 'waiting')
-    if (queued.length + kept.length + waiting.length === 0) return next(e)
+    const { queued, kept, waiting, context: ours, boxes } = attachments(list)
+    if (queued.length + kept.length + waiting.length === 0 || ours.length === 0) return next(e)
 
-    const context = [
-      ...(e.context ?? []),
-      ...waiting.map(n => n.pending ?? ''),
-      ...queued.map(n => queueContext(list, n)),
-      ...(kept.length > 0 ? [keptContext(list, kept)] : []),
-    ].filter(c => c !== '')
-    const result = await next({ ...e, context })
+    const result = await next({ ...e, text: withAttached(e.text, boxes, ours) })
     if (result.drop === undefined) {
+      await update($, preview, () => null)
+      const sentId = await recordSend($, splitAttached(withAttached('', boxes, ours))?.attached ?? ours.join('\n\n'), boxes, false, e.turnId === undefined)
       const ids = new Set([...queued, ...kept, ...waiting].map(n => n.id))
       await setNotes($, all =>
         all.map((n): InterjectNote => {
           if (!ids.has(n.id)) return n
-          if (n.mode === 'queue') return { ...n, status: 'sent' }
-          if (n.mode === 'cut') return { ...n, status: 'continuing', pending: undefined }
-          return { ...n, keep: 'sent' }
+          if (n.mode === 'queue') return { ...n, status: 'sent', sentId }
+          if (n.mode === 'cut') return { ...n, status: 'continuing', pending: undefined, sentId }
+          return { ...n, keep: 'sent', sentId }
         }),
       )
     }

@@ -42,13 +42,17 @@ while Claude is still writing, and interject right there.
      small **Enter ↵** beside the field is Desktop's hint for what Enter
      does: the same as **Ask on the side**.
    - **Add to my next message**: the box says it will be attached. When you
-     next send a message, the quoted line and your note go with it as extra
-     context. The box then says "Attached".
+     next send a message, the quoted line and your note are added under it.
+     The box then says "Attached".
    - **Cut here and continue**: everything in the reply after your line is
      withdrawn. If Claude is still writing, it is stopped. Your interjection
      is sent for you, and Claude answers it and continues the reply from
      that line. The rest of the old reply is hidden behind a
-     "✂ The rest of this reply … was cut" line.
+     "✂ The rest of this reply … was cut" line. The message sent for you
+     is one line, "✂ Cut and continue: " and your interjection; what Claude
+     needs to continue from your line goes with it, as a note that Claude
+     reads and you don't see. The note is added only once the message
+     starts Claude's turn, so a cut that isn't sent leaves nothing behind.
    - **Cancel**, or press Esc.
 
 **Interject on interjections.** A side answer is text like any other:
@@ -58,14 +62,19 @@ first line, each question and answer so far, and the new line). Under
 each side answer there are also:
 
 - **follow up**: another question about the same line, with the earlier
-  ones as context;
+  ones as context. Its box starts with one small line, "↳ follows up: …",
+  naming the question it follows. Its form, and then its box, sit right
+  under the box it follows, above that box's earlier follow-ups (newest
+  first), not after whatever box came last at the line;
 - **ask again with tools** (on a quick answer): the same question, now by a
   side chat that can use tools;
 - **keep**: the question and answer go with your next message. So do the
   boxes it builds on: the box it sits inside, the one that box sits inside,
   and so on up, and any earlier question it follows up on. Each of those says
   "Kept with a question built on it" and loses its own keep button. Each box
-  is sent once, however many boxes of one thread you keep;
+  is sent once, however many boxes of one thread you keep, and a note added
+  to the same message that follows up on a kept box names it instead of
+  repeating it;
 - **fork to session** (Desktop): the side chat goes on as a session of its
   own, forked from the conversation, named "Side chat: …". The mod asks
   Desktop for a **New task** card at the end of the conversation; press
@@ -81,10 +90,43 @@ each side answer there are also:
 - **dismiss**: removes the box (and boxes inside it), and stops a side chat
   that is still working.
 
+Each box starts with the words you selected, in small text and in quotation
+marks, with your question under it (a follow-up starts with the question it
+follows instead). A box made by picking a line from the
+list quotes the whole line.
+
+**What goes with your next message.** While anything is waiting to go with
+your next message (a kept box, a note added with **Add to my next message**,
+or a cut that still needs Enter), the band above the prompt box says how
+many boxes will go: "📎 2 boxes go with your next message · show". It sits
+in the same row as ✎ Interject here. Click it, and a box at the end of the
+latest reply shows the exact text that Claude will get; click it again, or
+**hide** in that box, to close it. Only messages you send yourself take it, not Claude's tool calls,
+and it waits however long you take. Once your message is sent, the line goes
+away.
+
+**Seeing what was sent.** Every box that went with a message (a note, a
+kept box, a cut) has **▾ show what was sent**: it shows, in small text, the
+exact text that Claude got for it, and **▴ hide** folds it again. Your own
+message stays short:
+
+- A cut's message is one line, "✂ Cut and continue: …", everywhere.
+- In Desktop and VS Code, a message with boxes attached shows as you typed
+  it: Desktop draws your messages itself, and a mod can't add to them.
+  Instead, Claude's answer to it starts with a small line, "📎 Your message
+  went with 2 boxes" (for a cut, "📎 Your cut came with instructions for
+  Claude"), and its **▾ show** shows all that went with it. A message typed
+  while Claude is still working goes into the reply already running, so it
+  gets no such line; its boxes' **▾ show what was sent** still work.
+- In the terminal, it shows as you typed it with a small
+  "📎 Sent with 2 boxes" line, and **▾ show all that was sent** under it
+  shows the whole message. ctrl+o's full transcript shows it too.
+
 From the keyboard: `/interject ask <question>` asks on the side at the last
 line of the latest reply; `/interject followup`, `/interject keep` and
-`/interject fork` act on the latest side answer; `/interject clear` removes
-every box.
+`/interject fork` act on the latest side answer; `/interject next` opens the
+text that goes with your next message at the end of the latest reply (the
+way to see it in VS Code, which has no band); `/interject clear` removes every box.
 
 Boxes are saved per session: resuming a session (`claude --resume`) brings
 them back. So does switching conversations inside a running session
@@ -98,6 +140,10 @@ them somewhere else), as JSON page files of up to 3 MiB each. Every
 session's are kept, with no limit on sessions, until you remove them:
 `/interject clear` or dismiss in the session, or delete its folder.
 Claude Code's file API has no delete, so a cleared page is written as `[]`.
+
+What went with each message is saved once, apart from the boxes, in the
+session's folder: the text in `sent/<id>.txt`, and which answer shows its
+📎 line in `sends.json`. So it takes none of the boxes' room.
 
 One session holds as many boxes as fit in the mod's state, which Claude
 Code caps at 4 MiB: about 2,000 boxes. Past that, that session's oldest
