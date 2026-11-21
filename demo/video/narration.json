@@ -31,11 +31,10 @@
  "c8d": "And the original session hears back from it.",
  "outro": "That's Interject. Ask about any line, right where you read it.",
  "t1": "Lost in a long Claude reply? Select any line, and interject right there.",
- "t2": "Get a quick answer in place,",
- "t3": "or send a background agent, with full tool use.",
+ "t3": "Ask on the side sends an agent with full tool use. Its answer stays at the line.",
  "t4": "Keep any answer, and it goes with your next message.",
  "t5": "If a reply goes off track, cut it, and Claude rewrites from that line.",
  "t6": "Or fork any side chat into a session of its own.",
- "t_outro": "Interject is free and open source. Links below.",
+ "t_outro": "Interject is free and open source. Ask Claude to install it.",
  "t7": "It opens under the original session, and reports back."
 }

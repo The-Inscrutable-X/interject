@@ -1,12 +1,36 @@
 # interject
 
-A Claude Code mod (an add-on that changes Claude Code's own screen) for
-when you get lost partway through a long reply. Stop at any line, even
-while Claude is still writing, and interject right there.
+Ever get lost halfway through a long Claude reply? Claude Code already has
+side chats and replies, but their answers float away from the line you
+asked about. **Interject** is a small Claude Code mod (an add-on that
+changes Claude Code's own screen) where **everything stays inline**, at the
+line where you asked.
+
+Stop at any line of a reply, even while Claude is still writing, and:
+
+- **Send an agent with full tool use** (*Ask on the side*). It can read
+  files, run commands and search the web, and its answer lands in a box
+  right under the line.
+- **Keep its answer for your next message**, so Claude builds on what you
+  found out.
+- **Cut the reply**, and Claude rewrites from that line, following your
+  note.
+
+You can also follow up on any answer, ask nested questions inside one, and
+turn a side chat into its own session.
 
 https://github.com/user-attachments/assets/b21f3111-a49e-40c1-90b6-1973be21706e
 
 *A 3-minute narrated demo in Claude Code Desktop. Waits are cut or sped up.*
+
+**Install** in Claude Code (2.1.275 or later) by typing:
+
+```
+/plugin install interject --marketplace The-Inscrutable-X/interject
+```
+
+Or ask your Claude to install Interject from this repository. Other ways
+are under [Install](#install).
 
 ## What it looks like
 
@@ -16,20 +40,20 @@ https://github.com/user-attachments/assets/b21f3111-a49e-40c1-90b6-1973be21706e
 <td><img src="demo/stills/02-interject-form.png" alt="The form that opens under the line"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/03-quick-answer.png" alt="A quick answer in a box under the line"></td>
-<td><img src="demo/stills/04-ask-on-the-side.png" alt="A side answer at the line"></td>
+<td><img src="demo/stills/03-ask-on-the-side.png" alt="A side answer at the line"></td>
+<td><img src="demo/stills/04-cut-here-and-continue.png" alt="Cut here and continue"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/05-cut-here-and-continue.png" alt="Cut here and continue"></td>
-<td><img src="demo/stills/07-follow-up.png" alt="A follow-up under the box that it follows"></td>
+<td><img src="demo/stills/06-follow-up.png" alt="A follow-up under the box that it follows"></td>
+<td><img src="demo/stills/07-nested-interjection.png" alt="A question asked inside a side answer"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/08-nested-interjection.png" alt="A question asked inside a side answer"></td>
-<td><img src="demo/stills/09-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
+<td><img src="demo/stills/08-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
+<td><img src="demo/stills/09-see-what-goes-with-next-message.png" alt="The exact text that goes with the next message"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/10-see-what-goes-with-next-message.png" alt="The exact text that goes with the next message"></td>
-<td><img src="demo/stills/12-fork-to-session.png" alt="Fork a side chat into its own session"></td>
+<td><img src="demo/stills/11-fork-to-session.png" alt="Fork a side chat into its own session"></td>
+<td><img src="demo/stills/12-fork-is-its-own-session.png" alt="The fork, listed under the original session"></td>
 </tr>
 </table>
 
@@ -198,10 +222,6 @@ Sessions started after that load it, in the terminal and in the Desktop
 app's Code tab. To update: `claude plugin marketplace update interject`.
 To remove: `claude plugin uninstall interject@interject`.
 
-While the repository is private, you need to have been invited to it, and
-git on your machine must be able to reach it (`gh auth login`, or an SSH
-key on your GitHub account).
-
 ### Working on the mod
 
 Clone this repository and point Claude Code at the folder instead: in
@@ -269,7 +289,7 @@ conversation would get is dropped, so the main thread never hears of it.
   - `demo/interject-desktop-demo.mp4`: the narrated demo in Claude Code Desktop (1080p), with two smaller copies: `demo/interject-desktop-demo-web.mp4` (1600 wide, for the blog) and `demo/interject-desktop-demo-720p.mp4` (under 10 MB, small enough for GitHub to play inside this page)
   - `demo/stills/`: one picture per feature, taken from that demo
   - `demo/video/`: the scripts that cut the demo from a screen recording, add the voiceover and music, and make the pictures. `demo/video/README.md` says how to run them
-  - `demo/thread/`: a draft launch thread for X (`thread.md`), with its pictures, a 42-second teaser video, and `preview.html` to see it laid out
+  - `demo/thread/`: a draft launch thread for X (`thread.md`), with its pictures, a 35-second teaser video, and `preview.html` to see it laid out
   - `demo/interject-demo.mp4`: an older demo in the terminal, with the scripts that recorded it (`drive.py`, `render2.py`, `steps.py`)
 
 ## License

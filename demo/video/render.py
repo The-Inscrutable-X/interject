@@ -113,19 +113,26 @@ CHAPTERS = [
          hl=[(446.5, 470, (15, 960, 645, 1095), False), (452.6, 470, (1320, 1497, 2670, 1761), False)],
          lines=[(445.3, "c8c"), (452.7, "c8d")], hold_end=2.0),
 ]
+ANSWER_LINE = (325, 928, 668, 962)   # "I ran two web searches." on the frame the video pauses on
 TEASER = [
+    # Select "LoRA", click Interject here, and the form opens. The camera starts a little lower
+    # than the full demo's, so Claude Code's own "Start a side chat / Reply" popup stays out of view.
     dict(title="Interject at any line", src="col",
-         segs=[(134.6, 141.6, 1), (141.6, 144.6, 2), (144.6, 146.6, 1)],
-         cam=[(135, 960, 1500), (144.7, 960, 1500), (145.8, 640, 1500)],
-         hl=[(135.4, 136.25, C((350, 676, 414, 704)), False),
-             (134.7, 136.25, C((196, 1206, 370, 1246)), False),
-             (141.1, 142.1, C((402, 874, 634, 916)), False)],
-         lines=[(134.7, "t1"), (141.1, "t2")]),
+         segs=[(135.1, 136.5, 0.65), (136.5, 137.3, 1)],
+         cam=[(135, 995, 1500), (137.3, 995, 1500)],
+         hl=[(135.4, 136.3, C((350, 676, 414, 704)), False),
+             (135.45, 136.95, C((196, 1206, 370, 1246)), False)],
+         lines=[(135.15, "t1")]),
+    # Ask on the side, shown with the follow-up that searches the web: the question is pasted and
+    # sent (Enter is Ask on the side), the agent's tool calls stream in, then its answer arrives.
     dict(title="Ask on the side", src="col",
-         segs=[(161.6, 164.6, 1), (164.6, 172.2, 4)],
-         cam=[(160, 1060, 1500), (165, 1060, 1500), (171, 760, 1500)],
-         hl=[(162.8, 164.3, C((220, 940, 388, 984)), False)],
-         lines=[(162.9, "t3")]),
+         segs=[(193.4, 195.15, 1), (198.55, 199.95, 0.8), (216.9, 217.4, 1, "pause:1.4")],
+         cam=[(193.4, 1100, 1500), (195.15, 1100, 1500), (198.55, 850, 1500), (199.95, 850, 1500),
+              (216.9, 700, 1500), (217.4, 700, 1500)],
+         hl=[(194.3, 194.85, (330, 1546, 590, 1606), False),       # Ask on the side (sent at 194.85)
+             (198.6, 200.1, (325, 1130, 1440, 1250), False),       # ToolSearch, WebSearch, WebSearch
+             (217.32, 219.0, ANSWER_LINE, False)],                  # "I ran two web searches."
+         lines=[(193.5, "t3")]),
     dict(title="Keep for next message", src="col",
          segs=[(243.2, 245.2, 0.75, "pause:1.0")],
          cam=[(243, 960, 1500)],
@@ -133,20 +140,24 @@ TEASER = [
              (244.6, 245.6, (330, 1075, 830, 1110), False),
              (244.6, 245.6, (300, 1820, 905, 1860), False)],
          lines=[(243.3, "t4")]),
+    # Cut here and continue, then the rewrite: every symbol is now defined before its equation.
     dict(title="Cut and continue", src="col",
-         segs=[(287.6, 296.0, 1)],
-         cam=[(287, 480, 1500)],
-         hl=[(288.6, 289.6, C((910, 710, 1122, 750)), False)],
-         lines=[(287.7, "t5")]),
+         segs=[(288.4, 293.0, 1), (351.8, 352.5, 1, "pause:1.2")],
+         cam=[(287, 480, 1500), (293.0, 480, 1500), (351.8, 0, 1500), (352.5, 0, 1500)],
+         hl=[(289.3, 290.15, C((910, 710, 1122, 750)), False),      # Cut here and continue (clicked at 290.15)
+             (351.9, 353.8, (300, 190, 1530, 475), False)],        # Symbols for the baseline update
+         lines=[(288.5, "t5")]),
+    # Fork to session. The stretch 438.6-439.9 is left out: a stray text selection there.
     dict(title="Fork to session", src="col",
-         segs=[(434.6, 441.8, 1.5)],
-         cam=[(434, 760, 1500)],
-         hl=[(435.3, 436.2, C((424, 872, 566, 906)), False),
+         segs=[(434.6, 438.6, 1.5), (439.9, 441.8, 1.5)],
+         cam=[(434, 760, 1500), (438.6, 760, 1500), (439.9, 664, 1500)],   # the page scrolls 96 px in the gap
+         hl=[(435.65, 436.5, C((424, 872, 566, 906)), False),
              (440.0, 441.6, C((762, 988, 838, 1032)), False)],
          lines=[(434.8, "t6")]),
+    # The fork in the sidebar, zoomed in so it reads on a phone, then the message it sends back.
     dict(title="Fork to session", src="win", same_chapter=True,
          segs=[(449.0, 453.3, 1)],
-         cam=[(449, 560, 2000, 1000), (452.4, 560, 2000, 1000), (453.1, 900, 2000, 1880)],
+         cam=[(449, 640, 1650, 825), (452.4, 640, 1650, 825), (453.1, 1150, 1600, 1995)],
          hl=[(449.0, 470, (15, 960, 645, 1095), False), (452.6, 470, (1320, 1497, 2670, 1761), False)],
          lines=[(449.2, "t7")], hold_end=1.2),
 ]
@@ -289,14 +300,15 @@ def title_card(which):
         ctext(640, "right where you read it.", font(50), INK)
         ctext(860, "A Claude Code mod  ·  shown in Claude Code Desktop", font(28), MUTED)
     elif STORY == "teaser":
-        ctext(300, "Interject", font(150, "Bold"), INK)
-        d.rectangle((W / 2 - 60, 495, W / 2 + 60, 503), fill=ORANGE)
-        ctext(545, "Ask about any line of Claude's reply, right where you read it.", font(46), INK)
+        ctext(270, "Interject", font(150, "Bold"), INK)
+        d.rectangle((W / 2 - 60, 465, W / 2 + 60, 473), fill=ORANGE)
+        ctext(515, "Ask about any line of Claude's reply, right where you read it.", font(46), INK)
+        ctext(650, "Ask Claude to install Interject", font(42, "Semibold"), INK)
         f = font(40, "Semibold"); url = "github.com/The-Inscrutable-X/interject"
         wd = d.textlength(url, font=f) + 80; x = (W - wd) / 2
-        d.rounded_rectangle((x, 660, x + wd, 746), radius=43, fill=(255, 255, 255), outline=(226, 222, 214), width=2)
-        d.text((x + 40, 680), url, font=f, fill=INK)
-        ctext(860, "A Claude Code mod  ·  free and open source", font(30), MUTED)
+        d.rounded_rectangle((x, 728, x + wd, 814), radius=43, fill=(255, 255, 255), outline=(226, 222, 214), width=2)
+        d.text((x + 40, 748), url, font=f, fill=INK)
+        ctext(900, "A Claude Code mod  ·  free and open source", font(30), MUTED)
     else:
         ctext(190, "Interject", font(120, "Bold"), INK)
         d.rectangle((W / 2 - 60, 355, W / 2 + 60, 363), fill=ORANGE)
@@ -474,6 +486,7 @@ def render(plan, speech, total, out_video):
                 for (hs, he, rect, dim) in ch["hl"]:
                     if hs <= raw <= he:
                         al = min(1.0, (raw - hs) / (0.18 * item["sp"]) + 0.15, (he - raw) / (0.18 * item["sp"]) + 0.15)
+                        if kind != "play": al = 1.0      # a paused frame shows its boxes in full
                         x0 = (rect[0] - r[0]) * s - 7; y0 = (rect[1] - r[1]) * s - 7
                         x1 = (rect[2] - r[0]) * s + 7; y1 = (rect[3] - r[1]) * s + 7
                         ov = content.copy()

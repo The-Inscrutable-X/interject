@@ -14,7 +14,7 @@ What the research says works for a launch thread, and how this draft follows it.
 These come from growth blogs and tool makers, not from X, so treat them as good habits rather than proven rules.
 
 - The first post decides whether anyone opens the rest. It names a pain the reader has felt, says what you built, and names only the most important features. Post 1 does this.
-- Put a short video on the first post: under about 45 seconds, starting on the result, with captions burned in, because X plays video muted. interject-teaser.mp4 is 42 seconds, opens on a real reply, and has subtitles. The 3-minute demo is too long for X unless the account has Premium (the limit is 2 min 20 s without it).
+- Put a short video on the first post: under about 45 seconds, starting on the result, with captions burned in, because X plays video muted. interject-teaser.mp4 is 35 seconds, opens on a real reply, has subtitles, and ends by telling people to ask Claude to install it. The 3-minute demo is too long for X unless the account has Premium (the limit is 2 min 20 s without it).
 - One idea per post, each with a picture. Pictures are 16:9, so X shows them uncropped, and they are cropped tight so the text reads on a phone.
 - 7 to 12 posts tends to do best. This draft has 12.
 - Be honest about limits near the end. It builds trust with technical readers.
@@ -24,31 +24,34 @@ These come from growth blogs and tool makers, not from X, so treat them as good 
 
 ## Other first lines to try
 
-1. Claude Code has side chats and replies, but their answers float away from the line you asked about. (used in the draft)
-2. Ever get lost halfway through a long Claude reply?
-3. Claude wrote you 2,000 words. You're stuck on line 40. Now what?
-4. I kept losing my place in long Claude replies, so I built a way to ask about any line, right where I'm reading.
-5. What if you could stop Claude at any line of its reply and ask "wait, what does that mean?"
-6. Side chats float away and replies scroll off. I wanted my questions to stay where I asked them.
+1. Ever get lost halfway through a long Claude reply? (used in the draft)
+2. Claude wrote you 2,000 words. You're stuck on line 40. Now what?
+3. I kept losing my place in long Claude replies, so I built a way to ask about any line, right where I'm reading.
+4. What if you could stop Claude at any line of its reply and ask "wait, what does that mean?"
+5. Side chats float away and replies scroll off. I wanted my questions to stay where I asked them.
 
 ## The thread
 
-### 1/12  (275 of 280 characters, attach interject-teaser.mp4)
+### 1/12  (276 of 280 characters, attach interject-teaser.mp4)
 
 ```
-Claude Code has side chats and replies, but their answers float away from the line you asked about.
+Ever get lost halfway through a long Claude reply?
 
-So I built Interject. At any line of a reply, you can:
+I built Interject, a Claude Code mod. Stop at any line and:
 • send an agent with full tool use
 • keep its answer for your next message
 • cut, and Claude rewrites from there
 
+Everything stays inline, not floating away.
+
 🧵
 ```
 
-### 2/12  (122 of 280 characters, attach 2-answer-stays-at-the-line.jpg)
+### 2/12  (231 of 280 characters, attach 2-answer-stays-at-the-line.jpg)
 
 ```
+Claude Code already has side chats and replies. But their answers float away from the line you asked about.
+
 With Interject, each question lives in a box right under its line. You always know where to look, what you asked, and why.
 ```
 
@@ -60,12 +63,12 @@ Select any text in a reply, even while Claude is still writing, and click ✎ In
 A small form opens right under that line, with four choices.
 ```
 
-### 4/12  (214 of 280 characters, attach 4-side-answer-and-follow-up.jpg)
+### 4/12  (230 of 280 characters, attach 4-side-answer-and-follow-up.jpg)
 
 ```
-Quick answer: a few seconds, no tools.
+Ask on the side sends a forked agent with the whole conversation and full tool use. It can read files, run commands and search the web. Nothing is added to your main conversation.
 
-Ask on the side: a forked agent with the whole conversation and full tool use. It can read files, run commands and search the web. Nothing is added to your main conversation.
+No tools needed? Quick answer replies in seconds.
 ```
 
 ### 5/12  (186 of 280 characters, attach 5-nested.jpg)
