@@ -5,3 +5,9 @@
 .DS_Store
 # A local experiment, not part of the mod.
 codex-client/
+
+# The raw Desktop screen recording (440 MB) that demo/video/render.py cuts.
+demo/raw/
+# Made by demo/video/make_voice.py and render.py; rebuilt on each run.
+demo/video/vo/
+demo/video/music_bed.wav

@@ -4,6 +4,34 @@ A Claude Code mod (an add-on that changes Claude Code's own screen) for
 when you get lost partway through a long reply. Stop at any line, even
 while Claude is still writing, and interject right there.
 
+[![A 3-minute narrated demo of Interject in Claude Code Desktop. Click to open the video.](demo/interject-desktop-demo-poster.jpg)](demo/interject-desktop-demo.mp4)
+
+*A 3-minute narrated demo in Claude Code Desktop. Click the picture to open
+the video. Waits are cut or sped up.*
+
+## What it looks like
+
+<table>
+<tr>
+<td><img src="demo/stills/01-interject-here.png" alt="Select any line, then click Interject here"></td>
+<td><img src="demo/stills/02-interject-form.png" alt="The form that opens under the line"></td>
+</tr>
+<tr>
+<td><img src="demo/stills/04-ask-on-the-side-and-follow-up.png" alt="A side answer and a follow-up under it"></td>
+<td><img src="demo/stills/05-nested-interjection.png" alt="A question asked inside a side answer"></td>
+</tr>
+<tr>
+<td><img src="demo/stills/06-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
+<td><img src="demo/stills/09-see-what-goes-with-next-message.png" alt="The exact text that goes with the next message"></td>
+</tr>
+<tr>
+<td><img src="demo/stills/07-cut-here-and-continue.png" alt="Cut here and continue"></td>
+<td><img src="demo/stills/11-fork-to-session.png" alt="Fork a side chat into its own session"></td>
+</tr>
+</table>
+
+All 12 pictures are in [`demo/stills/`](demo/stills/).
+
 ## How to use it
 
 1. **Pick a line.** Select it with the mouse (click and drag, or
@@ -235,7 +263,12 @@ conversation would get is dropped, so the main thread never hears of it.
 - `hooks/register.tsx`: all of the mod's code
 - `types/index.d.ts`: the shape of the values the mod keeps (the boxes, the draft being typed, the current selection)
 - `tests/interject.test.tsx`: automated tests (`claude plugin test .` in this folder)
-- `demo/`: the scripts that recorded `demo/interject-demo.mp4`
+- `demo/`: the demo videos and pictures
+  - `demo/interject-desktop-demo.mp4`: the narrated demo in Claude Code Desktop (1080p), with a smaller copy, `demo/interject-desktop-demo-web.mp4`
+  - `demo/stills/`: one picture per feature, taken from that demo
+  - `demo/video/`: the scripts that cut the demo from a screen recording, add the voiceover and music, and make the pictures. `demo/video/README.md` says how to run them
+  - `demo/thread/`: a draft launch thread for X (`thread.md`), with its pictures, a 42-second teaser video, and `preview.html` to see it laid out
+  - `demo/interject-demo.mp4`: an older demo in the terminal, with the scripts that recorded it (`drive.py`, `render2.py`, `steps.py`)
 
 ## License
 
