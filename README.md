@@ -20,15 +20,15 @@ https://github.com/user-attachments/assets/b21f3111-a49e-40c1-90b6-1973be21706e
 <td><img src="demo/stills/04-ask-on-the-side.png" alt="A side answer at the line"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/05-follow-up.png" alt="A follow-up under the box that it follows"></td>
-<td><img src="demo/stills/06-nested-interjection.png" alt="A question asked inside a side answer"></td>
+<td><img src="demo/stills/05-cut-here-and-continue.png" alt="Cut here and continue"></td>
+<td><img src="demo/stills/07-follow-up.png" alt="A follow-up under the box that it follows"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/07-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
+<td><img src="demo/stills/08-nested-interjection.png" alt="A question asked inside a side answer"></td>
+<td><img src="demo/stills/09-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
+</tr>
+<tr>
 <td><img src="demo/stills/10-see-what-goes-with-next-message.png" alt="The exact text that goes with the next message"></td>
-</tr>
-<tr>
-<td><img src="demo/stills/08-cut-here-and-continue.png" alt="Cut here and continue"></td>
 <td><img src="demo/stills/12-fork-to-session.png" alt="Fork a side chat into its own session"></td>
 </tr>
 </table>
