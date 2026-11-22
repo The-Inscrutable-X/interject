@@ -144,13 +144,18 @@ TEASER = [
     # Cut here and continue: the form turns into the cut box in place (the page reflows 348 px at
     # the click, so the camera follows it), then the rewrite that defines every symbol.
     dict(title="Cut and continue", src="col",
-         segs=[(288.4, 290.15, 1), (290.4, 291.3, 1, "pause:0.8"), (351.8, 352.5, 1, "pause:1.6")],
+         # The video stops on the finished note while the request is marked and read out (t5b),
+         # then the click, the cut, and the rewrite with its new list of symbols (t5c).
+         segs=[(288.4, 289.6, 1, "pause:2.0"), (289.6, 290.15, 1), (290.4, 291.3, 1, "pause:0.6"),
+               (351.8, 352.5, 1, "pause:1.8")],
          cam=[(288.4, 745, 1500), (290.15, 745, 1500), (290.4, 1093, 1500), (291.3, 1093, 1500),
               (351.8, 0, 1500), (352.5, 0, 1500)],
-         hl=[(289.3, 290.15, C((910, 710, 1122, 750)), False),      # Cut here and continue
+         hl=[(289.5, 289.75, (995, 938, 1539, 968), False, "mark"), # "Before every equation, please define what
+             (289.5, 289.75, (357, 977, 820, 1006), False, "mark"),  #  exactly each of the symbols means."
+             (289.8, 290.15, C((910, 710, 1122, 750)), False),      # Cut here and continue
              (290.45, 292.0, (305, 1446, 915, 1488), False),        # The rest of this reply (112 lines) was cut.
-             (351.9, 353.8, (300, 190, 1530, 475), False)],         # Symbols for the baseline update
-         lines=[(288.5, "t5")]),
+             (351.9, 354.0, (300, 190, 1530, 475), False)],         # Symbols for the baseline update
+         lines=[(288.5, "t5"), (289.55, "t5b"), (351.85, "t5c")]),
     # Fork to session: click it, the New session card appears (437.4), and the video pauses on the
     # card with its Start button boxed. Ending here skips a stray text selection after 438.6.
     dict(title="Fork to session", src="col",
@@ -504,15 +509,23 @@ def render(plan, speech, total, out_video):
                         frame = frame.copy(); frame[y0:y1, x0:x1] = ref_frame(rt, src)[y0:y1, x0:x1]
                 content = view(frame, r)
                 s = CW / r[2]
-                for (hs, he, rect, dim) in ch["hl"]:
+                for h in ch["hl"]:
+                    hs, he, rect = h[:3]; style = h[4] if len(h) > 4 else "box"
                     if hs <= raw <= he:
                         al = min(1.0, (raw - hs) / (0.18 * item["sp"]) + 0.15, (he - raw) / (0.18 * item["sp"]) + 0.15)
                         if kind != "play": al = 1.0      # a paused frame shows its boxes in full
-                        x0 = (rect[0] - r[0]) * s - 7; y0 = (rect[1] - r[1]) * s - 7
-                        x1 = (rect[2] - r[0]) * s + 7; y1 = (rect[3] - r[1]) * s + 7
                         ov = content.copy()
-                        cv2.polylines(ov, [rounded_rect_pts(x0, y0, x1, y1, 12).astype(np.int32)], True,
-                                      ORANGE[::-1], 4, cv2.LINE_AA)
+                        if style == "mark":              # a highlighter stroke behind a phrase
+                            x0 = (rect[0] - r[0]) * s - 3; y0 = (rect[1] - r[1]) * s - 2
+                            x1 = (rect[2] - r[0]) * s + 3; y1 = (rect[3] - r[1]) * s + 2
+                            cv2.rectangle(ov, (int(x0), int(y0)), (int(x1), int(y1)), (120, 200, 255), -1)
+                            ov = np.minimum(ov, content)  # multiply-like: dark text stays dark
+                            al *= 0.85
+                        else:
+                            x0 = (rect[0] - r[0]) * s - 7; y0 = (rect[1] - r[1]) * s - 7
+                            x1 = (rect[2] - r[0]) * s + 7; y1 = (rect[3] - r[1]) * s + 7
+                            cv2.polylines(ov, [rounded_rect_pts(x0, y0, x1, y1, 12).astype(np.int32)], True,
+                                          ORANGE[::-1], 4, cv2.LINE_AA)
                         content = cv2.addWeighted(ov, al, content, 1 - al, 0)
                 if tag:
                     pb, pa = pills[tag]
@@ -592,7 +605,8 @@ def camsheet(outdir):
             tile = fr[y:y + g["h"] // 4, x:x + g["w"] // 4].copy()
             r = cam_at(ch["cam"], ch["src"], tt)
             cv2.rectangle(tile, (int(r[0] / 4), int(r[1] / 4)), (int((r[0] + r[2]) / 4), int((r[1] + r[3]) / 4)), (255, 80, 0), 3)
-            for (hs, he, rect, dim) in ch["hl"]:
+            for h in ch["hl"]:
+                hs, he, rect = h[:3]
                 if hs - 1 <= tt <= he + 1:
                     cv2.rectangle(tile, (rect[0] // 4, rect[1] // 4), (rect[2] // 4, rect[3] // 4), (60, 110, 230), 2)
             cv2.putText(tile, f"{tt}", (8, 34), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 220), 3)

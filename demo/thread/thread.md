@@ -14,7 +14,7 @@ What the research says works for a launch thread, and how this draft follows it.
 These come from growth blogs and tool makers, not from X, so treat them as good habits rather than proven rules.
 
 - The first post decides whether anyone opens the rest. It names a pain the reader has felt, says what you built, and names only the most important features. Post 1 does this.
-- Put a short video on the first post: under about 45 seconds, starting on the result, with captions burned in, because X plays video muted. interject-teaser.mp4 is 42 seconds, opens on a real reply, has subtitles, and ends by telling people to ask Claude to install it. The 3-minute demo is too long for X unless the account has Premium (the limit is 2 min 20 s without it).
+- Put a short video on the first post: under about 45 seconds, starting on the result, with captions burned in, because X plays video muted. interject-teaser.mp4 is 49 seconds, opens on a real reply, has subtitles, and ends by telling people to ask Claude to install it. The 3-minute demo is too long for X unless the account has Premium (the limit is 2 min 20 s without it).
 - One idea per post, each with a picture. Pictures are 16:9, so X shows them uncropped, and they are cropped tight so the text reads on a phone.
 - 7 to 12 posts tends to do best. This draft has 12.
 - Be honest about limits near the end. It builds trust with technical readers.
