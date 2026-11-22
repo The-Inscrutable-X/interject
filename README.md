@@ -1,23 +1,21 @@
 # interject
 
-Ever get lost halfway through a long Claude reply? Claude Code already has
-side chats and replies, but their answers float away from the line you
-asked about. **Interject** is a small Claude Code mod (an add-on that
-changes Claude Code's own screen) where **everything stays inline**, at the
-line where you asked.
+Claude wrote you 2,000 words. You're stuck on line 40. Now what? Use
+**Interject**, a small Claude Code mod (an add-on that changes Claude
+Code's own screen). At any line of a reply, even while Claude is still
+writing:
 
-Stop at any line of a reply, even while Claude is still writing, and:
-
-- **Send an agent with full tool use** (*Ask on the side*). It can read
+- **Ask an agent with full tool use** (*Ask on the side*). It can read
   files, run commands and search the web, and its answer lands in a box
   right under the line.
-- **Keep its answer for your next message**, so Claude builds on what you
-  found out.
-- **Cut the reply**, and Claude rewrites from that line, following your
-  note.
+- **Keep its answers for next turn**, so Claude builds on what you found
+  out.
+- **Cut, and Claude rewrites future lines**, following your note.
 
-You can also follow up on any answer, ask nested questions inside one, and
-turn a side chat into its own session.
+**Everything stays inline**, at the line where you asked. Claude Code
+already has side chats and replies, but their answers float away from that
+line. You can also follow up on any answer, ask nested questions inside
+one, and turn a side chat into its own session.
 
 https://github.com/user-attachments/assets/b21f3111-a49e-40c1-90b6-1973be21706e
 
