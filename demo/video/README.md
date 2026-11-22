@@ -43,7 +43,7 @@ python render.py full ../interject-desktop-demo.mp4
 python make_stills.py ../raw/screen-recording-2026-11-20.mov ../stills
 ```
 
-For the 35-second teaser (for the first post of a thread), set `STORY=teaser`:
+For the 42-second teaser (for the first post of a thread), set `STORY=teaser`:
 
 ```bash
 STORY=teaser python render.py full teaser.mp4

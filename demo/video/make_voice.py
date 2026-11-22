@@ -11,6 +11,7 @@ voice = sys.argv[1] if len(sys.argv) > 1 else "Samantha"
 os.makedirs(os.path.join(HERE, "vo"), exist_ok=True)
 for key, text in json.load(open(os.path.join(HERE, "narration.json"))).items():
     out = os.path.join(HERE, "vo", f"{voice}_{key}.wav")
-    subprocess.run(["say", "-v", voice, "-r", "178", "-o", out, "--file-format=WAVE",
+    rate = "165" if key.startswith("t") else "178"   # teaser lines (t1, t3, ...) a little slower
+    subprocess.run(["say", "-v", voice, "-r", rate, "-o", out, "--file-format=WAVE",
                     "--data-format=LEI16@48000", text], check=True)
     print(key, text)

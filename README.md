@@ -289,7 +289,7 @@ conversation would get is dropped, so the main thread never hears of it.
   - `demo/interject-desktop-demo.mp4`: the narrated demo in Claude Code Desktop (1080p), with two smaller copies: `demo/interject-desktop-demo-web.mp4` (1600 wide, for the blog) and `demo/interject-desktop-demo-720p.mp4` (under 10 MB, small enough for GitHub to play inside this page)
   - `demo/stills/`: one picture per feature, taken from that demo
   - `demo/video/`: the scripts that cut the demo from a screen recording, add the voiceover and music, and make the pictures. `demo/video/README.md` says how to run them
-  - `demo/thread/`: a draft launch thread for X (`thread.md`), with its pictures, a 35-second teaser video, and `preview.html` to see it laid out
+  - `demo/thread/`: a draft launch thread for X (`thread.md`), with its pictures, a 42-second teaser video, and `preview.html` to see it laid out
   - `demo/interject-demo.mp4`: an older demo in the terminal, with the scripts that recorded it (`drive.py`, `render2.py`, `steps.py`)
 
 ## License

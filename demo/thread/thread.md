@@ -14,7 +14,7 @@ What the research says works for a launch thread, and how this draft follows it.
 These come from growth blogs and tool makers, not from X, so treat them as good habits rather than proven rules.
 
 - The first post decides whether anyone opens the rest. It names a pain the reader has felt, says what you built, and names only the most important features. Post 1 does this.
-- Put a short video on the first post: under about 45 seconds, starting on the result, with captions burned in, because X plays video muted. interject-teaser.mp4 is 35 seconds, opens on a real reply, has subtitles, and ends by telling people to ask Claude to install it. The 3-minute demo is too long for X unless the account has Premium (the limit is 2 min 20 s without it).
+- Put a short video on the first post: under about 45 seconds, starting on the result, with captions burned in, because X plays video muted. interject-teaser.mp4 is 42 seconds, opens on a real reply, has subtitles, and ends by telling people to ask Claude to install it. The 3-minute demo is too long for X unless the account has Premium (the limit is 2 min 20 s without it).
 - One idea per post, each with a picture. Pictures are 16:9, so X shows them uncropped, and they are cropped tight so the text reads on a phone.
 - 7 to 12 posts tends to do best. This draft has 12.
 - Be honest about limits near the end. It builds trust with technical readers.
@@ -24,8 +24,8 @@ These come from growth blogs and tool makers, not from X, so treat them as good 
 
 ## Other first lines to try
 
-1. Ever get lost halfway through a long Claude reply? (used in the draft)
-2. Claude wrote you 2,000 words. You're stuck on line 40. Now what?
+1. Claude wrote you 2,000 words. You're stuck on line 40. Now what? (used in the draft)
+2. Ever get lost halfway through a long Claude reply?
 3. I kept losing my place in long Claude replies, so I built a way to ask about any line, right where I'm reading.
 4. What if you could stop Claude at any line of its reply and ask "wait, what does that mean?"
 5. Side chats float away and replies scroll off. I wanted my questions to stay where I asked them.
@@ -35,16 +35,14 @@ These come from growth blogs and tool makers, not from X, so treat them as good 
 ### 1/12  (276 of 280 characters, attach interject-teaser.mp4)
 
 ```
-Ever get lost halfway through a long Claude reply?
+Claude wrote you 2,000 words. You're stuck on line 40. Now what?
 
 I built Interject, a Claude Code mod. Stop at any line and:
 • send an agent with full tool use
 • keep its answer for your next message
 • cut, and Claude rewrites from there
 
-Everything stays inline, not floating away.
-
-🧵
+All inline, not floating away. 🧵
 ```
 
 ### 2/12  (231 of 280 characters, attach 2-answer-stays-at-the-line.jpg)
@@ -133,7 +131,7 @@ Code: github.com/The-Inscrutable-X/interject
 ### 12/12  (240 of 280 characters)
 
 ```
-This is a small side tool that I made by myself, mostly for myself.
+This is a small side tool that's originally made mostly for myself.
 
 The full write-up, with a 3-minute demo: hanqixiao.github.io/blog/posts/interject/interject.html
 

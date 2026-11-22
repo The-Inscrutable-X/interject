@@ -113,53 +113,58 @@ CHAPTERS = [
          hl=[(446.5, 470, (15, 960, 645, 1095), False), (452.6, 470, (1320, 1497, 2670, 1761), False)],
          lines=[(445.3, "c8c"), (452.7, "c8d")], hold_end=2.0),
 ]
-ANSWER_LINE = (325, 928, 668, 962)   # "I ran two web searches." on the frame the video pauses on
 TEASER = [
-    # Select "LoRA", click Interject here, and the form opens. The camera starts a little lower
-    # than the full demo's, so Claude Code's own "Start a side chat / Reply" popup stays out of view.
+    # One continuous example on one line: select "2.1 Baseline", click Interject here, the form
+    # opens, the question goes in, Ask on the side, and the answer arrives in the same box.
+    # Claude Code's own "Start a side chat / Reply" popup above the selection is covered with the
+    # clean page from just before the selection (patch). The camera eases up as the form opens.
     dict(title="Interject at any line", src="col",
-         segs=[(135.1, 136.5, 0.65), (136.5, 137.3, 1)],
-         cam=[(135, 995, 1500), (137.3, 995, 1500)],
-         hl=[(135.4, 136.3, C((350, 676, 414, 704)), False),
-             (135.45, 136.95, C((196, 1206, 370, 1246)), False)],
-         lines=[(135.15, "t1")]),
-    # Ask on the side, shown with the follow-up that searches the web: the question is pasted and
-    # sent (Enter is Ask on the side), the agent's tool calls stream in, then its answer arrives.
+         segs=[(150.6, 155.0, 0.8)],
+         cam=[(150.6, 990, 1500), (153.4, 990, 1500), (154.9, 765, 1500)],
+         patch=[(151.1, 154.5, (360, 1046, 806, 1127), 150.5)],
+         hl=[(151.5, 152.5, (306, 1128, 862, 1172), False),         # the selected line
+             (152.35, 153.05, (298, 1812, 552, 1866), False)],      # Interject here
+         lines=[(150.7, "t1")]),
+    # The waits are cut where nothing on screen changes (155.0-161.6 and 165.4-168.0), so the cuts
+    # don't show. The page scrolls 262 px as the answer lands, and the camera moves with it, so the
+    # answer holds still and the frame stops above its last paragraph. The voice, not the screen,
+    # says that the agent has full tool use.
     dict(title="Ask on the side", src="col",
-         segs=[(193.4, 195.15, 1), (198.55, 199.95, 0.8), (216.9, 217.4, 1, "pause:1.4")],
-         cam=[(193.4, 1100, 1500), (195.15, 1100, 1500), (198.55, 850, 1500), (199.95, 850, 1500),
-              (216.9, 700, 1500), (217.4, 700, 1500)],
-         hl=[(194.3, 194.85, (330, 1546, 590, 1606), False),       # Ask on the side (sent at 194.85)
-             (198.6, 200.1, (325, 1130, 1440, 1250), False),       # ToolSearch, WebSearch, WebSearch
-             (217.32, 219.0, ANSWER_LINE, False)],                  # "I ran two web searches."
-         lines=[(193.5, "t3")]),
+         segs=[(161.6, 165.4, 1), (168.0, 172.3, 1, "pause:1.6")],
+         cam=[(161.6, 765, 1500), (170.0, 765, 1500), (171.5, 503, 1500), (172.3, 503, 1500)],
+         hl=[(163.3, 164.15, (330, 1410, 590, 1476), False),        # Ask on the side (clicked at 164.15)
+             (171.55, 174.0, (305, 866, 862, 902), False)],         # the line the answer belongs to
+         lines=[(161.7, "t3")]),
     dict(title="Keep for next message", src="col",
-         segs=[(243.2, 245.2, 0.75, "pause:1.0")],
-         cam=[(243, 960, 1500)],
-         hl=[(243.6, 244.55, (515, 1075, 600, 1110), False),
-             (244.6, 245.6, (330, 1075, 830, 1110), False),
-             (244.6, 245.6, (300, 1820, 905, 1860), False)],
+         segs=[(243.2, 245.2, 0.75, "pause:1.2")],
+         cam=[(243, 270, 1500)],
+         hl=[(243.6, 244.55, (510, 1080, 600, 1112), False),        # keep
+             (244.6, 246.0, (330, 1080, 830, 1112), False)],        # Kept: goes with your next message.
          lines=[(243.3, "t4")]),
-    # Cut here and continue, then the rewrite: every symbol is now defined before its equation.
+    # Cut here and continue: the form turns into the cut box in place (the page reflows 348 px at
+    # the click, so the camera follows it), then the rewrite that defines every symbol.
     dict(title="Cut and continue", src="col",
-         segs=[(288.4, 293.0, 1), (351.8, 352.5, 1, "pause:1.2")],
-         cam=[(287, 480, 1500), (293.0, 480, 1500), (351.8, 0, 1500), (352.5, 0, 1500)],
-         hl=[(289.3, 290.15, C((910, 710, 1122, 750)), False),      # Cut here and continue (clicked at 290.15)
-             (351.9, 353.8, (300, 190, 1530, 475), False)],        # Symbols for the baseline update
+         segs=[(288.4, 290.15, 1), (290.4, 291.3, 1, "pause:0.8"), (351.8, 352.5, 1, "pause:1.6")],
+         cam=[(288.4, 745, 1500), (290.15, 745, 1500), (290.4, 1093, 1500), (291.3, 1093, 1500),
+              (351.8, 0, 1500), (352.5, 0, 1500)],
+         hl=[(289.3, 290.15, C((910, 710, 1122, 750)), False),      # Cut here and continue
+             (290.45, 292.0, (305, 1446, 915, 1488), False),        # The rest of this reply (112 lines) was cut.
+             (351.9, 353.8, (300, 190, 1530, 475), False)],         # Symbols for the baseline update
          lines=[(288.5, "t5")]),
-    # Fork to session. The stretch 438.6-439.9 is left out: a stray text selection there.
+    # Fork to session: click it, the New session card appears (437.4), and the video pauses on the
+    # card with its Start button boxed. Ending here skips a stray text selection after 438.6.
     dict(title="Fork to session", src="col",
-         segs=[(434.6, 438.6, 1.5), (439.9, 441.8, 1.5)],
-         cam=[(434, 760, 1500), (438.6, 760, 1500), (439.9, 664, 1500)],   # the page scrolls 96 px in the gap
-         hl=[(435.65, 436.5, C((424, 872, 566, 906)), False),
-             (440.0, 441.6, C((762, 988, 838, 1032)), False)],
+         segs=[(434.6, 438.4, 1, "pause:1.4")],
+         cam=[(434, 760, 1500)],
+         hl=[(435.65, 436.42, C((424, 872, 566, 906)), False),       # fork to session
+             (437.7, 440.0, (1143, 1578, 1257, 1644), False)],      # Start
          lines=[(434.8, "t6")]),
     # The fork in the sidebar, zoomed in so it reads on a phone, then the message it sends back.
     dict(title="Fork to session", src="win", same_chapter=True,
          segs=[(449.0, 453.3, 1)],
-         cam=[(449, 640, 1650, 825), (452.4, 640, 1650, 825), (453.1, 1150, 1600, 1995)],
+         cam=[(449, 640, 1300, 650), (452.4, 640, 1300, 650), (453.1, 1150, 1600, 1995)],
          hl=[(449.0, 470, (15, 960, 645, 1095), False), (452.6, 470, (1320, 1497, 2670, 1761), False)],
-         lines=[(449.2, "t7")], hold_end=1.2),
+         lines=[(449.2, "t7")], hold_end=2.2),
 ]
 TEASER_TOC = ["Interject at any line", "Ask on the side", "Keep for next message",
               "Cut and continue", "Fork to session"]
@@ -172,6 +177,8 @@ if STORY == "teaser":
     CHAPTERS, TOC = TEASER, TEASER_TOC
     INTRO_SEC, OUTRO_SEC, OUTRO_KEY = 0.0, 4.6, "t_outro"
 GAP, TAIL, XF = 0.35, 0.7, 0.3          # pause between lines, after a chapter, crossfade
+if os.environ.get("STORY") == "teaser":
+    GAP, TAIL = 0.55, 1.3                # the teaser is short, so let each line breathe
 
 def font(size, weight="Regular"):
     f = ImageFont.truetype(SF, size); f.set_variation_by_name(weight); return f
@@ -389,6 +396,17 @@ def view(src_img, r):
     return cv2.warpAffine(img, M, (CW, CHH), flags=cv2.INTER_CUBIC,
                           borderMode=cv2.BORDER_CONSTANT, borderValue=APPBG[::-1])
 
+_refs = {}
+def ref_frame(t, src):
+    """One frame of the source at time t, cropped like reader() crops it (for patches)."""
+    if (t, src) not in _refs:
+        g = SRC[src]
+        p = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{t:.3f}", "-i", RAW, "-frames:v", "1",
+                            "-vf", f"crop={g['w']}:{g['h']}:{g['x']}:{g['y']}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-"],
+                           capture_output=True, check=True).stdout
+        _refs[(t, src)] = np.frombuffer(p, np.uint8).reshape(g["h"], g["w"], 3)
+    return _refs[(t, src)]
+
 def reader(s, e, sp, src):
     g = SRC[src]
     vf = f"setpts=(PTS-STARTPTS)/{sp},fps={FPS},crop={g['w']}:{g['h']}:{g['x']}:{g['y']}"
@@ -481,6 +499,9 @@ def render(plan, speech, total, out_video):
                 while k < want or frame is None:
                     frame = next(rd); k += 1
                 r = cam_at(ch["cam"], src, raw)
+                for (p0, p1, (x0, y0, x1, y1), rt) in ch.get("patch", []):
+                    if p0 <= raw <= p1:      # hide something on screen with the clean page from time rt
+                        frame = frame.copy(); frame[y0:y1, x0:x1] = ref_frame(rt, src)[y0:y1, x0:x1]
                 content = view(frame, r)
                 s = CW / r[2]
                 for (hs, he, rect, dim) in ch["hl"]:
