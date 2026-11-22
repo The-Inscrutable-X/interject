@@ -32,14 +32,14 @@ These come from growth blogs and tool makers, not from X, so treat them as good 
 
 ## The thread
 
-### 1/12  (276 of 280 characters, attach interject-teaser.mp4)
+### 1/12  (279 of 280 characters, attach interject-teaser.mp4)
 
 ```
 Claude wrote you 2,000 words. You're stuck on line 40. Now what?
 
-I built Interject, a Claude Code mod. Stop at any line and:
+Use a small Claude Code mod I made called Interject. At any line:
 • send an agent with full tool use
-• keep its answer for your next message
+• keep answers for your next message
 • cut, and Claude rewrites from there
 
 All inline, not floating away. 🧵
