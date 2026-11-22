@@ -1,6 +1,6 @@
 # Interject launch thread (draft)
 
-A draft of the launch thread for X. Copy each post from below. The pictures and `interject-teaser.mp4` (the video for post 1) are in this folder; `../video/make_thread_images.py` and `STORY=teaser python ../video/render.py full ...` rebuild them.
+A draft of the launch thread for X. Copy each post from below. The pictures and `interject-teaser.mp4` (the video for post 1) are in this folder on your computer, and on GitHub they are on the [`media` branch](https://github.com/The-Inscrutable-X/interject/tree/media/demo/thread); `../video/make_thread_images.py` and `STORY=teaser python ../video/render.py full ...` rebuild them.
 Open `preview.html` next to this file to see the thread with its pictures. After editing a post, run `python ../video/make_thread_preview.py`: it recounts each post the way X does (a link is 23, an emoji or a symbol like • is 2) and rebuilds the preview.
 
 ## Before posting

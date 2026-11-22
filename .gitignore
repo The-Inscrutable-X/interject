@@ -11,3 +11,13 @@ demo/raw/
 # Made by demo/video/make_voice.py and render.py; rebuilt on each run.
 demo/video/vo/
 demo/video/music_bed.wav
+
+# The demo videos and pictures live on the "media" branch, so that installing
+# the mod (which downloads main) stays small. Your copies stay here;
+# demo/video/publish_media.sh copies them to that branch.
+demo/*.mp4
+demo/*.png
+demo/*.jpg
+demo/stills/
+demo/thread/*.mp4
+demo/thread/*.jpg

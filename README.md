@@ -34,28 +34,28 @@ are under [Install](#install).
 
 <table>
 <tr>
-<td><img src="demo/stills/01-interject-here.png" alt="Select any line, then click Interject here"></td>
-<td><img src="demo/stills/02-interject-form.png" alt="The form that opens under the line"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/01-interject-here.png" alt="Select any line, then click Interject here"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/02-interject-form.png" alt="The form that opens under the line"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/03-ask-on-the-side.png" alt="A side answer at the line"></td>
-<td><img src="demo/stills/04-cut-here-and-continue.png" alt="Cut here and continue"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/03-ask-on-the-side.png" alt="A side answer at the line"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/04-cut-here-and-continue.png" alt="Cut here and continue"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/06-follow-up.png" alt="A follow-up under the box that it follows"></td>
-<td><img src="demo/stills/07-nested-interjection.png" alt="A question asked inside a side answer"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/06-follow-up.png" alt="A follow-up under the box that it follows"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/07-nested-interjection.png" alt="A question asked inside a side answer"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/08-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
-<td><img src="demo/stills/09-see-what-goes-with-next-message.png" alt="The exact text that goes with the next message"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/08-keep-and-add-to-next-message.png" alt="Kept answers and notes, counted above the prompt"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/09-see-what-goes-with-next-message.png" alt="The exact text that goes with the next message"></td>
 </tr>
 <tr>
-<td><img src="demo/stills/11-fork-to-session.png" alt="Fork a side chat into its own session"></td>
-<td><img src="demo/stills/12-fork-is-its-own-session.png" alt="The fork, listed under the original session"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/11-fork-to-session.png" alt="Fork a side chat into its own session"></td>
+<td><img src="https://raw.githubusercontent.com/The-Inscrutable-X/interject/media/demo/stills/12-fork-is-its-own-session.png" alt="The fork, listed under the original session"></td>
 </tr>
 </table>
 
-Each picture shows what you click, then what you get. All 13 are in [`demo/stills/`](demo/stills/).
+Each picture shows what you click, then what you get. All 13 are on the [`media` branch](https://github.com/The-Inscrutable-X/interject/tree/media/demo/stills).
 
 ## How to use it
 
@@ -283,12 +283,15 @@ conversation would get is dropped, so the main thread never hears of it.
 - `hooks/register.tsx`: all of the mod's code
 - `types/index.d.ts`: the shape of the values the mod keeps (the boxes, the draft being typed, the current selection)
 - `tests/interject.test.tsx`: automated tests (`claude plugin test .` in this folder)
-- `demo/`: the demo videos and pictures
-  - `demo/interject-desktop-demo.mp4`: the narrated demo in Claude Code Desktop (1080p), with two smaller copies: `demo/interject-desktop-demo-web.mp4` (1600 wide, for the blog) and `demo/interject-desktop-demo-720p.mp4` (under 10 MB, small enough for GitHub to play inside this page)
-  - `demo/stills/`: one picture per feature, taken from that demo
-  - `demo/video/`: the scripts that cut the demo from a screen recording, add the voiceover and music, and make the pictures. `demo/video/README.md` says how to run them
-  - `demo/thread/`: a draft launch thread for X (`thread.md`), with its pictures, a 49-second teaser video, and `preview.html` to see it laid out
-  - `demo/interject-demo.mp4`: an older demo in the terminal, with the scripts that recorded it (`drive.py`, `render2.py`, `steps.py`)
+- `demo/`: the scripts and text behind the demo. The demo videos and pictures themselves are on the [`media` branch](https://github.com/The-Inscrutable-X/interject/tree/media), not on main, because installing the mod downloads main: they are about 80 MB, and the mod's code is under 1 MB.
+  - `demo/video/`: the scripts that cut the narrated demo from a screen recording, add the voiceover and music, and make the pictures. `demo/video/README.md` says how to run them, and `demo/video/publish_media.sh` copies new videos and pictures to the `media` branch
+  - `demo/thread/`: a draft launch thread for X (`thread.md`) and `preview.html` to see it laid out. Its pictures and 49-second teaser video are on the `media` branch
+  - `drive.py`, `render2.py`, `steps.py`: the scripts that recorded an older demo in the terminal
+- On the `media` branch, in `demo/`:
+  - `interject-desktop-demo.mp4`: the narrated demo in Claude Code Desktop (1080p), with two smaller copies: `-web.mp4` (1600 wide, for the blog) and `-720p.mp4` (under 10 MB, small enough for GitHub to play inside this page)
+  - `stills/`: one picture per feature, taken from that demo
+  - `thread/`: the thread's pictures and teaser video
+  - `interject-demo.mp4`: the older demo in the terminal
 
 ## License
 

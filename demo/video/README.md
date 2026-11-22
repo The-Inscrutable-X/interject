@@ -55,3 +55,19 @@ the video holds a frame, without rendering anything.
 
 Times in `CHAPTERS` are seconds in the raw recording. Rows and boxes are
 in the chat column of the recording, in its own pixels.
+
+## Publishing new videos and pictures
+
+The videos and pictures that these scripts make are not stored on the main
+branch, because installing the mod downloads main. They live on the `media`
+branch instead, and the README's pictures load from there. After you make new
+ones, copy them to that branch and push it:
+
+```
+sh demo/video/publish_media.sh
+git push origin media
+```
+
+The script makes one commit on `media` with every `.mp4`, `.png` and `.jpg`
+in `demo/`, `demo/stills/` and `demo/thread/`. It does not change the branch
+that you have checked out.
